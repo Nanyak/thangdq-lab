@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/Nanyak/thangdq-lab/shortener"
@@ -23,12 +24,18 @@ func CreateShortUrlHandler(c *gin.Context, storeService *store.StorageService) {
 		return
 	}
 
+	fmt.Printf("Creating short URL for: %s\n", createRequest.LongUrl)
 	shortUrl := shortener.GenerateShortUrl(createRequest.LongUrl)
+	fmt.Printf("Generated short URL: %s\n", shortUrl)
 
 	err := storeService.SaveUrlMapping(c.Request.Context(), shortUrl, createRequest.LongUrl)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save URL mapping"})
+		fmt.Printf("Error saving URL mapping: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to save URL mapping",
+			"details": err.Error(),
+		})
 		return
 	}
 
