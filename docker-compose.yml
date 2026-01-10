@@ -1,6 +1,6 @@
 services:
   app:
-    image: thangdq/url_shortener_api:1.0
+    image: m0ch1/url_shortener_api:1.0
     ports:
       - "9808:9808"
     depends_on:
