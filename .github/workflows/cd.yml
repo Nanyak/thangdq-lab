@@ -24,4 +24,4 @@ jobs:
 
             # Pull the latest image and restart the container
             docker pull ghcr.io/nanyak/url_shortener_api:latest
-            docker-compose -f /home/thangdq/api/docker-compose.yml up -d
+            docker compose -f /home/thangdq/api/docker-compose.yml up -d
