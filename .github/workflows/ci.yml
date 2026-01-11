@@ -26,5 +26,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/url_shortener_api:latest
-            ghcr.io/${{ github.repository_owner }}/url_shortener_api:${{github.sha}}
+            ghcr.io/nanyak/url_shortener_api:latest
+            ghcr.io/nanyak/url_shortener_api:${{github.sha}}

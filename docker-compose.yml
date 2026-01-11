@@ -1,6 +1,6 @@
 services:
   app:
-    image: m0ch1/url_shortener_api:1.0
+    image: ghcr.io/nanyak/url_shortener_api:latest
     ports:
       - "9808:9808"
     depends_on:
