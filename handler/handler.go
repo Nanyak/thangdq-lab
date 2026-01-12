@@ -29,11 +29,11 @@ func CreateShortUrlHandler(c *gin.Context, storeService *store.StorageService) {
 		longUrl = "https://" + longUrl
 	}
 
-	fmt.Printf("Creating short URL for: %s\n", createRequest.LongUrl)
-	shortUrl := shortener.GenerateShortUrl(createRequest.LongUrl)
+	fmt.Printf("Creating short URL for: %s\n", longUrl)
+	shortUrl := shortener.GenerateShortUrl(longUrl)
 	fmt.Printf("Generated short URL: %s\n", shortUrl)
 
-	err := storeService.SaveUrlMapping(c.Request.Context(), shortUrl, createRequest.LongUrl)
+	err := storeService.SaveUrlMapping(c.Request.Context(), shortUrl, longUrl)
 
 	if err != nil {
 		fmt.Printf("Error saving URL mapping: %v\n", err)
