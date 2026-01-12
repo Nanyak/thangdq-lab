@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/Nanyak/thangdq-lab/shortener"
 	"github.com/Nanyak/thangdq-lab/store"
@@ -23,6 +24,10 @@ func CreateShortUrlHandler(c *gin.Context, storeService *store.StorageService) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	longUrl := strings.TrimSpace(createRequest.LongUrl)
+	if !strings.HasPrefix(longUrl, "http://") && !strings.HasPrefix(longUrl, "https://") {
+		longUrl = "https://" + longUrl
+	}
 
 	fmt.Printf("Creating short URL for: %s\n", createRequest.LongUrl)
 	shortUrl := shortener.GenerateShortUrl(createRequest.LongUrl)
@@ -33,7 +38,7 @@ func CreateShortUrlHandler(c *gin.Context, storeService *store.StorageService) {
 	if err != nil {
 		fmt.Printf("Error saving URL mapping: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to save URL mapping",
+			"error":   "Failed to save URL mapping",
 			"details": err.Error(),
 		})
 		return
