@@ -4,64 +4,69 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
-
-	"github.com/go-redis/redis/v8"
 )
 
 var ErrShortURLNotFound = errors.New("short URL not found in storage")
 
 type StorageService struct {
-	redisClient *redis.Client
+	mongoRepo  *MongoRepository
+	redisCache *RedisCache
 }
 
-func NewStorageService(redisClient *redis.Client) *StorageService {
-	return &StorageService{redisClient: redisClient}
+func NewStorageService(mongoRepo *MongoRepository, redisCache *RedisCache) *StorageService {
+	return &StorageService{
+		mongoRepo:  mongoRepo,
+		redisCache: redisCache,
+	}
 }
 
-// Note that in a real world usage, the cache duration shouldn't have
-// an expiration time, an LRU policy config should be set where the
-// values that are retrieved less often are purged automatically from
-// the cache and stored back in RDBMS whenever the cache is full
-
-const cacheDuration = 6 * time.Hour
-
-// func InitStorageService() *StorageService {
-// 	redisClient := redis.NewClient(&redis.Options{
-// 		Addr:     "localhost:6379",
-// 		Password: "",
-// 		DB:       0,
-// 	})
-
-// 	pong, err := redisClient.Ping(ctx).Result()
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	fmt.Printf("\nRedis started successfully: pong message = {%s}", pong)
-
-// 	storeService.redisClient = redisClient
-// 	return storeService
-// }
-
+// SaveUrlMapping saves to MongoDB first (primary store), then caches in Redis.
 func (s *StorageService) SaveUrlMapping(
 	ctx context.Context,
 	shortUrl string,
 	originalUrl string,
 ) error {
-	return s.redisClient.Set(ctx, shortUrl, originalUrl, cacheDuration).Err()
+	// Save to MongoDB (primary store)
+	if err := s.mongoRepo.CreateLink(ctx, shortUrl, originalUrl); err != nil {
+		return fmt.Errorf("failed to save to MongoDB: %w", err)
+	}
+
+	// Cache in Redis (best effort, don't fail if cache write fails)
+	if err := s.redisCache.Set(ctx, shortUrl, originalUrl); err != nil {
+		fmt.Printf("Warning: failed to cache in Redis: %v\n", err)
+	}
+
+	return nil
 }
 
+// RetrieveInitialUrl checks Redis cache first, on miss fetches from MongoDB and populates cache.
 func (s *StorageService) RetrieveInitialUrl(
 	ctx context.Context,
 	shortUrl string,
 ) (string, error) {
-	result, err := s.redisClient.Get(ctx, shortUrl).Result()
-	if err == redis.Nil {
-		return "", ErrShortURLNotFound
-	}
+	// Check Redis cache first
+	cachedUrl, err := s.redisCache.Get(ctx, shortUrl)
 	if err != nil {
-		return "", fmt.Errorf("redis get failed: %w", err)
+		fmt.Printf("Warning: Redis cache lookup failed: %v\n", err)
 	}
-	return result, err
+
+	if cachedUrl != "" {
+		return cachedUrl, nil
+	}
+
+	// Cache miss - fetch from MongoDB
+	link, err := s.mongoRepo.GetLinkByShortURL(ctx, shortUrl)
+	if err != nil {
+		if errors.Is(err, ErrLinkNotFound) {
+			return "", ErrShortURLNotFound
+		}
+		return "", fmt.Errorf("failed to fetch from MongoDB: %w", err)
+	}
+
+	// Populate cache for future requests (best effort)
+	if err := s.redisCache.Set(ctx, shortUrl, link.OriginalURL); err != nil {
+		fmt.Printf("Warning: failed to populate Redis cache: %v\n", err)
+	}
+
+	return link.OriginalURL, nil
 }

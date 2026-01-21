@@ -6,8 +6,13 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      mongodb:
+        condition: service_healthy
     environment:
       - REDIS_ADDR=redis:6379
+      - MONGO_URI=mongodb://mongodb:27017
+      - MONGO_DB=url_shortener
+      - MONGO_COLLECTION=links
 
   redis:
     image: redis:7-alpine
@@ -18,3 +23,18 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  mongodb_data:
