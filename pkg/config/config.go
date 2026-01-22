@@ -41,7 +41,7 @@ func Load() (*Config, error) {
 		},
 		MongoDB: MongoDBConfig{
 			URI:           getEnv("MONGO_URI", "mongodb://localhost:27017"),
-			Database:      getEnv("MONGO_DB", "stuffsy"),
+			Database:      getEnv("MONGO_DB", "url_shortener"),
 			Collection:    getEnv("MONGO_COLLECTION", "links"),
 			MaxRetries:    getEnvInt("MONGO_MAX_RETRIES", 10),
 			RetryInterval: getEnvDuration("MONGO_RETRY_INTERVAL", 2*time.Second),
