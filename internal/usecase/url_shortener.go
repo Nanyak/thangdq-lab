@@ -3,8 +3,10 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"github.com/Nanyak/thangdq-lab/internal/entity"
 	"time"
+
+	"github.com/Nanyak/thangdq-lab/internal/entity"
+	"github.com/Nanyak/thangdq-lab/pkg/errors"
 )
 
 type URLShortener struct {
@@ -24,20 +26,37 @@ func NewURLShortener(repo URLRepository, cache URLCache, generator ShortCodeGene
 func (u *URLShortener) CreateShortURL(ctx context.Context, originalURL string) (*entity.Link, error) {
 	shortCode := u.generator.Generate(originalURL)
 
+	// Check cache first - if exists, return existing link
+	if url, err := u.cache.Get(ctx, shortCode); err == nil {
+		return &entity.Link{
+			ShortCode:   shortCode,
+			OriginalURL: url,
+		}, nil
+	}
+
 	link := &entity.Link{
 		ShortCode:   shortCode,
 		OriginalURL: originalURL,
 		CreatedAt:   time.Now(),
 	}
 
-	// Save to MongoDB first (source of truth)
+	// Save to MongoDB
 	if err := u.repo.Save(ctx, link); err != nil {
+		// If duplicate, fetch existing and return it
+		if errors.IsDuplicate(err) {
+			existing, fetchErr := u.repo.FindByShortCode(ctx, shortCode)
+			if fetchErr != nil {
+				return nil, fmt.Errorf("failed to fetch existing link: %w", fetchErr)
+			}
+			// Cache existing link
+			_ = u.cache.Set(ctx, shortCode, existing.OriginalURL)
+			return existing, nil
+		}
 		return nil, fmt.Errorf("failed to save link: %w", err)
 	}
 
 	// Cache in Redis (best effort)
 	if err := u.cache.Set(ctx, shortCode, originalURL); err != nil {
-		// Log warning but don't fail operation
 		fmt.Printf("Warning: failed to cache link: %v\n", err)
 	}
 
