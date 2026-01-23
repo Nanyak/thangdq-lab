@@ -11,6 +11,7 @@ type Config struct {
 	Server   ServerConfig
 	MongoDB  MongoDBConfig
 	Redis    RedisConfig
+	S3       S3Config
 	CacheTTL time.Duration
 }
 
@@ -33,6 +34,14 @@ type RedisConfig struct {
 	DB       int
 }
 
+type S3Config struct {
+	Region          string
+	Bucket          string
+	AccessKeyID     string
+	SecretAccessKey string
+	Endpoint        string
+}
+
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
@@ -51,6 +60,13 @@ func Load() (*Config, error) {
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getEnvInt("REDIS_DB", 0),
 		},
+		S3: S3Config{
+			Region:          getEnv("AWS_REGION", ""),
+			Bucket:          getEnv("S3_BUCKET", ""),
+			AccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
+			SecretAccessKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
+			Endpoint:        getEnv("S3_ENDPOINT", ""),
+		},
 		CacheTTL: getEnvDuration("CACHE_TTL", 6*time.Hour),
 	}
 
@@ -67,6 +83,18 @@ func (c *Config) Validate() error {
 	}
 	if c.Redis.Addr == "" {
 		return fmt.Errorf("REDIS_ADDR is required")
+	}
+	if c.S3.Region == "" {
+		return fmt.Errorf("AWS_REGION is required")
+	}
+	if c.S3.Bucket == "" {
+		return fmt.Errorf("S3_BUCKET is required")
+	}
+	if c.S3.AccessKeyID == "" {
+		return fmt.Errorf("AWS_ACCESS_KEY_ID is required")
+	}
+	if c.S3.SecretAccessKey == "" {
+		return fmt.Errorf("AWS_SECRET_ACCESS_KEY is required")
 	}
 	return nil
 }
