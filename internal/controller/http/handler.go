@@ -88,7 +88,7 @@ func (h *Handler) RedirectURL(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(http.StatusFound, originalURL)
+	c.Redirect(http.StatusMovedPermanently, originalURL)
 }
 
 var shortCodePattern = regexp.MustCompile(`^[a-zA-Z0-9]{8}$`)
