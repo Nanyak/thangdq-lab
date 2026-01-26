@@ -13,7 +13,7 @@ import (
 	httphandler "github.com/Nanyak/thangdq-lab/internal/controller/http"
 	"github.com/Nanyak/thangdq-lab/internal/repository/mongodb"
 	"github.com/Nanyak/thangdq-lab/internal/repository/redis"
-	// s3repo "github.com/Nanyak/thangdq-lab/internal/repository/s3"
+	s3repo "github.com/Nanyak/thangdq-lab/internal/repository/s3"
 	"github.com/Nanyak/thangdq-lab/internal/usecase"
 	"github.com/Nanyak/thangdq-lab/internal/usecase/shortcode"
 	"github.com/Nanyak/thangdq-lab/pkg/config"
@@ -79,20 +79,20 @@ func main() {
 
 	linkCache := redis.NewLinkCache(redisClient, cfg.CacheTTL)
 
-	// S3 Storage initialization example (uncomment to enable file storage)
-	// s3Storage, err := s3repo.NewS3Storage(&cfg.S3)
-	// if err != nil {
-	// 	log.Fatalf("Failed to initialize S3 storage: %v", err)
-	// }
-	// storageUsecase := usecase.NewStorage(s3Storage)
-	// Inject storageUsecase into your handlers/services as needed
+	// S3 Storage initialization
+	s3Storage, err := s3repo.NewS3Storage(&cfg.S3)
+	if err != nil {
+		log.Fatalf("Failed to initialize S3 storage: %v", err)
+	}
+	storageUsecase := usecase.NewStorage(s3Storage)
 
 	// Initialize use case
 	generator := shortcode.NewGenerator()
 	urlShortener := usecase.NewURLShortener(linkRepo, linkCache, generator)
 
-	// Initialize HTTP handler
+	// Initialize HTTP handlers
 	handler := httphandler.NewHandler(urlShortener, cfg.Server.BaseURL)
+	storageHandler := httphandler.NewStorageHandler(storageUsecase)
 
 	// Setup router
 	router := gin.Default()
@@ -102,7 +102,13 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"message": "Hello, World!"})
 	})
 	router.POST("/url", handler.CreateShortURL)
-	router.GET("/:shortUrl", handler.RedirectURL)
+	router.GET("/r/:shortUrl", handler.RedirectURL)
+
+	// Storage routes
+	router.POST("/files", storageHandler.UploadFile)
+	router.GET("/files", storageHandler.ListFiles)
+	router.DELETE("/files/:key", storageHandler.DeleteFile)
+	router.GET("/files/:key/url", storageHandler.GetPresignedURL)
 
 	// Start server with graceful shutdown
 	srv := &http.Server{
