@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -55,6 +56,7 @@ func (h *StorageHandler) UploadFile(c *gin.Context) {
 
 	// Upload to storage
 	if err := h.storage.Upload(c.Request.Context(), key, src, contentType); err != nil {
+		log.Printf("ERROR: Upload failed for key=%q: %v", key, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload file"})
 		return
 	}
@@ -62,6 +64,7 @@ func (h *StorageHandler) UploadFile(c *gin.Context) {
 	// Generate presigned URL for immediate access (1 hour expiry)
 	url, err := h.storage.GetURL(c.Request.Context(), key, time.Hour)
 	if err != nil {
+		log.Printf("ERROR: GetURL failed for key=%q: %v", key, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate URL"})
 		return
 	}
@@ -80,6 +83,7 @@ func (h *StorageHandler) ListFiles(c *gin.Context) {
 
 	files, err := h.storage.List(c.Request.Context(), prefix)
 	if err != nil {
+		log.Printf("ERROR: ListFiles failed with prefix=%q: %v", prefix, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list files"})
 		return
 	}
@@ -115,6 +119,7 @@ func (h *StorageHandler) DeleteFile(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 			return
 		}
+		log.Printf("ERROR: Delete failed for key=%q: %v", key, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete file"})
 		return
 	}
@@ -138,6 +143,7 @@ func (h *StorageHandler) GetPresignedURL(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 			return
 		}
+		log.Printf("ERROR: GetPresignedURL failed for key=%q: %v", key, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate URL"})
 		return
 	}
