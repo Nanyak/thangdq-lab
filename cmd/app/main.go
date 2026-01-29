@@ -101,14 +101,16 @@ func main() {
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "Hello, World!"})
 	})
-	router.POST("/url", handler.CreateShortURL)
 	router.GET("/r/:shortUrl", handler.RedirectURL)
 
 	// Storage routes
-	router.POST("/files", storageHandler.UploadFile)
-	router.GET("/files", storageHandler.ListFiles)
-	router.DELETE("/files/:key", storageHandler.DeleteFile)
-	router.GET("/files/:key/url", storageHandler.GetPresignedURL)
+	api := router.Group("/v1/api") {
+		api.POST("/url", handler.CreateShortURL)
+		api.POST("/files", storageHandler.UploadFile)
+		api.GET("/files", storageHandler.ListFiles)
+		api.DELETE("/files/:key", storageHandler.DeleteFile)
+		api.GET("/files/:key/url", storageHandler.GetPresignedURL)
+	}
 
 	// Start server with graceful shutdown
 	srv := &http.Server{
