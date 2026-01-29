@@ -96,8 +96,13 @@ func main() {
 
 	// Setup router
 	router := gin.Default()
-	router.Use(cors.Default())
-
+	router.Use(cors.New(cors.Config{
+	AllowOrigins:     []string{"https://stuffsy.site"},
+	AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+	AllowHeaders:     []string{"Content-Type", "Authorization"},
+	ExposeHeaders:   []string{"Content-Length"},
+	AllowCredentials: true,
+}))
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "Hello, World!"})
 	})
