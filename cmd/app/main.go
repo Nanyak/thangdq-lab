@@ -104,7 +104,8 @@ func main() {
 	router.GET("/r/:shortUrl", handler.RedirectURL)
 
 	// Storage routes
-	api := router.Group("/v1/api") {
+	api := router.Group("/v1/api") 
+	{
 		api.POST("/url", handler.CreateShortURL)
 		api.POST("/files", storageHandler.UploadFile)
 		api.GET("/files", storageHandler.ListFiles)
