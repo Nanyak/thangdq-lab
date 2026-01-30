@@ -11,6 +11,7 @@ import (
 	"time"
 
 	httphandler "github.com/Nanyak/thangdq-lab/internal/controller/http"
+	"github.com/Nanyak/thangdq-lab/internal/infrastructure/auth/cognito"
 	"github.com/Nanyak/thangdq-lab/internal/repository/mongodb"
 	"github.com/Nanyak/thangdq-lab/internal/repository/redis"
 	s3repo "github.com/Nanyak/thangdq-lab/internal/repository/s3"
@@ -86,6 +87,13 @@ func main() {
 	}
 	storageUsecase := usecase.NewStorage(s3Storage)
 
+	// Cognito auth initialization
+	cognitoService, err := cognito.NewCognitoService(&cfg.Cognito)
+	if err != nil {
+		log.Fatalf("Failed to initialize Cognito service: %v", err)
+	}
+	authUsecase := usecase.NewAuth(cognitoService)
+
 	// Initialize use case
 	generator := shortcode.NewGenerator()
 	urlShortener := usecase.NewURLShortener(linkRepo, linkCache, generator)
@@ -93,6 +101,7 @@ func main() {
 	// Initialize HTTP handlers
 	handler := httphandler.NewHandler(urlShortener, cfg.Server.BaseURL)
 	storageHandler := httphandler.NewStorageHandler(storageUsecase)
+	authHandler := httphandler.NewAuthHandler(authUsecase)
 
 	// Setup router
 	router := gin.Default()
@@ -109,13 +118,23 @@ func main() {
 	router.GET("/r/:shortUrl", handler.RedirectURL)
 
 	// Storage routes
-	api := router.Group("/v1/api") 
+	api := router.Group("/v1/api")
 	{
 		api.POST("/url", handler.CreateShortURL)
 		api.POST("/files", storageHandler.UploadFile)
 		api.GET("/files", storageHandler.ListFiles)
 		api.DELETE("/files/:key", storageHandler.DeleteFile)
 		api.GET("/files/:key/url", storageHandler.GetPresignedURL)
+	}
+
+	// Auth routes
+	auth := api.Group("/auth")
+	{
+		auth.POST("/signup", authHandler.SignUp)
+		auth.POST("/confirm-signup", authHandler.ConfirmSignUp)
+		auth.POST("/signin", authHandler.SignIn)
+		auth.POST("/forgot-password", authHandler.ForgotPassword)
+		auth.POST("/confirm-forgot-password", authHandler.ConfirmForgotPassword)
 	}
 
 	// Start server with graceful shutdown

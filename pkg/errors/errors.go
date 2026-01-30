@@ -46,3 +46,31 @@ func IsDownloadFailed(err error) bool {
 func IsDeleteFailed(err error) bool {
 	return errors.Is(err, ErrDeleteFailed)
 }
+
+// Auth errors
+var (
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrUserAlreadyExists  = errors.New("user already exists")
+	ErrUserNotConfirmed   = errors.New("user is not confirmed")
+	ErrCodeMismatch       = errors.New("confirmation code mismatch")
+)
+
+// IsInvalidCredentials checks if error is an invalid credentials error
+func IsInvalidCredentials(err error) bool {
+	return errors.Is(err, ErrInvalidCredentials)
+}
+
+// IsUserAlreadyExists checks if error is a user already exists error
+func IsUserAlreadyExists(err error) bool {
+	return errors.Is(err, ErrUserAlreadyExists)
+}
+
+// IsUserNotConfirmed checks if error is a user not confirmed error
+func IsUserNotConfirmed(err error) bool {
+	return errors.Is(err, ErrUserNotConfirmed)
+}
+
+// IsCodeMismatch checks if error is a code mismatch error
+func IsCodeMismatch(err error) bool {
+	return errors.Is(err, ErrCodeMismatch)
+}

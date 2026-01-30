@@ -1,0 +1,141 @@
+package http
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/Nanyak/thangdq-lab/internal/entity"
+	"github.com/Nanyak/thangdq-lab/pkg/errors"
+	"github.com/gin-gonic/gin"
+)
+
+// AuthService defines the auth use case interface
+type AuthService interface {
+	SignUp(ctx context.Context, email, password, name string) (*entity.AuthResult, error)
+	ConfirmSignUp(ctx context.Context, email, confirmationCode string) error
+	SignIn(ctx context.Context, email, password string) (*entity.AuthTokens, error)
+	ForgotPassword(ctx context.Context, email string) error
+	ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error
+}
+
+// AuthHandler handles authentication HTTP requests
+type AuthHandler struct {
+	auth AuthService
+}
+
+// NewAuthHandler creates a new AuthHandler instance
+func NewAuthHandler(auth AuthService) *AuthHandler {
+	return &AuthHandler{
+		auth: auth,
+	}
+}
+
+// SignUp handles user registration
+func (h *AuthHandler) SignUp(c *gin.Context) {
+	var req SignUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := h.auth.SignUp(c.Request.Context(), req.Email, req.Password, req.Name)
+	if err != nil {
+		if errors.IsUserAlreadyExists(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sign up"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, SignUpResponse{
+		UserID:    result.UserID,
+		Confirmed: result.Confirmed,
+	})
+}
+
+// ConfirmSignUp handles sign-up confirmation
+func (h *AuthHandler) ConfirmSignUp(c *gin.Context) {
+	var req ConfirmSignUpRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.auth.ConfirmSignUp(c.Request.Context(), req.Email, req.ConfirmationCode); err != nil {
+		if errors.IsCodeMismatch(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid confirmation code"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm sign up"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Account confirmed successfully"})
+}
+
+// SignIn handles user authentication
+func (h *AuthHandler) SignIn(c *gin.Context) {
+	var req SignInRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tokens, err := h.auth.SignIn(c.Request.Context(), req.Email, req.Password)
+	if err != nil {
+		if errors.IsInvalidCredentials(err) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+			return
+		}
+		if errors.IsUserNotConfirmed(err) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "User is not confirmed"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sign in"})
+		return
+	}
+
+	c.JSON(http.StatusOK, AuthTokensResponse{
+		AccessToken:  tokens.AccessToken,
+		IDToken:      tokens.IDToken,
+		RefreshToken: tokens.RefreshToken,
+		ExpiresIn:    tokens.ExpiresIn,
+	})
+}
+
+// ForgotPassword initiates a password reset
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.auth.ForgotPassword(c.Request.Context(), req.Email); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate password reset"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Password reset code sent"})
+}
+
+// ConfirmForgotPassword completes the password reset
+func (h *AuthHandler) ConfirmForgotPassword(c *gin.Context) {
+	var req ConfirmForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.auth.ConfirmForgotPassword(c.Request.Context(), req.Email, req.Code, req.NewPassword); err != nil {
+		if errors.IsCodeMismatch(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid confirmation code"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
+}
