@@ -12,6 +12,7 @@ type Config struct {
 	MongoDB  MongoDBConfig
 	Redis    RedisConfig
 	S3       S3Config
+	Cognito  CognitoConfig
 	CacheTTL time.Duration
 }
 
@@ -42,6 +43,12 @@ type S3Config struct {
 	Endpoint        string
 }
 
+type CognitoConfig struct {
+	UserPoolID  string
+	ClientID    string
+	ClientSecret  string
+	Region      string
+}
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
@@ -66,6 +73,12 @@ func Load() (*Config, error) {
 			AccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
 			SecretAccessKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
 			Endpoint:        getEnv("S3_ENDPOINT", ""),
+		},
+		Cognito: CognitoConfig{
+			UserPoolID:   getEnv("COGNITO_USER_POOL_ID", ""),
+			ClientID:     getEnv("COGNITO_CLIENT_ID", ""),
+			ClientSecret: getEnv("COGNITO_CLIENT_SECRET", ""),
+			Region:       getEnv("COGNITO_REGION", ""),
 		},
 		CacheTTL: getEnvDuration("CACHE_TTL", 6*time.Hour),
 	}
