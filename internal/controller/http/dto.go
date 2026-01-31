@@ -34,6 +34,7 @@ type PresignedURLResponse struct {
 // Auth DTOs
 
 type SignUpRequest struct {
+	Username string `json:"username" binding:"required"`
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
 	Name     string `json:"name" binding:"required"`
@@ -69,4 +70,12 @@ type ConfirmForgotPasswordRequest struct {
 	Email       string `json:"email" binding:"required,email"`
 	Code        string `json:"code" binding:"required"`
 	NewPassword string `json:"new_password" binding:"required,min=8"`
+}
+
+type UserResponse struct {
+	ID            string `json:"id"`
+	Username      string `json:"username"`
+	Email         string `json:"email"`
+	Name          string `json:"name"`
+	EmailVerified bool   `json:"email_verified"`
 }

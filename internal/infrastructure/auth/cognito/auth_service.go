@@ -10,6 +10,7 @@ import (
 	"github.com/Nanyak/thangdq-lab/internal/entity"
 	"github.com/Nanyak/thangdq-lab/pkg/config"
 	pkgerrors "github.com/Nanyak/thangdq-lab/pkg/errors"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	cip "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
@@ -19,8 +20,12 @@ import (
 // CognitoService implements the AuthProvider interface using AWS Cognito
 type CognitoService struct {
 	client       *cip.Client
+	userPoolID   string
 	clientID     string
 	clientSecret string
+	tokenUrl     string
+	jwtIssuerUrl string
+	jwkSet       jwk.Set
 }
 
 // NewCognitoService creates a new CognitoService instance
@@ -31,23 +36,29 @@ func NewCognitoService(cfg *config.CognitoConfig) (*CognitoService, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	keySet, err := jwk.Fetch(context.Background(), cfg.TokenUrl)
+	if err != nil {
+		return nil, err
+	}
 	client := cip.NewFromConfig(awsCfg)
 
 	return &CognitoService{
 		client:       client,
 		clientID:     cfg.ClientID,
 		clientSecret: cfg.ClientSecret,
+		tokenUrl:     cfg.TokenUrl,
+		jwtIssuerUrl: cfg.JWTIssuerUrl,
+		jwkSet:       keySet,
 	}, nil
 }
 
 // SignUp registers a new user in Cognito
-func (s *CognitoService) SignUp(ctx context.Context, email, password, name string) (*entity.AuthResult, error) {
-	secretHash := s.computeSecretHash(email)
+func (s *CognitoService) SignUp(ctx context.Context, username, email, password, name string) (*entity.AuthResult, error) {
+	secretHash := s.computeSecretHash(username)
 
 	input := &cip.SignUpInput{
 		ClientId:   &s.clientID,
-		Username:   &email,
+		Username:   &username,
 		Password:   &password,
 		SecretHash: &secretHash,
 		UserAttributes: []types.AttributeType{
@@ -149,6 +160,30 @@ func (s *CognitoService) ConfirmForgotPassword(ctx context.Context, email, code,
 	return nil
 }
 
+func (s *CognitoService) GetUser(ctx context.Context, accessToken string) (*entity.User, error) {
+	output, err := s.client.GetUser(ctx, &cip.GetUserInput{
+		AccessToken: &accessToken,
+	})
+	if err != nil {
+		return nil, mapCognitoError(err)
+	}
+
+	user := &entity.User{Username: *output.Username}
+	for _, attr := range output.UserAttributes {
+		switch *attr.Name {
+		case "sub":
+			user.ID = *attr.Value
+		case "email":
+			user.Email = *attr.Value
+		case "email_verified":
+			user.EmailVerified = *attr.Value == "true"
+		case "name":
+			user.Name = *attr.Value
+		}
+	}
+	return user, nil
+}
+
 // computeSecretHash generates the SECRET_HASH for Cognito API calls
 func (s *CognitoService) computeSecretHash(username string) string {
 	mac := hmac.New(sha256.New, []byte(s.clientSecret))
@@ -162,6 +197,7 @@ func mapCognitoError(err error) error {
 	var notAuthorized *types.NotAuthorizedException
 	var userNotConfirmed *types.UserNotConfirmedException
 	var codeMismatch *types.CodeMismatchException
+	var userNotFound *types.UserNotFoundException
 
 	switch {
 	case asError(err, &usernameExists):
@@ -172,6 +208,8 @@ func mapCognitoError(err error) error {
 		return pkgerrors.ErrUserNotConfirmed
 	case asError(err, &codeMismatch):
 		return pkgerrors.ErrCodeMismatch
+	case asError(err, &userNotFound):
+		return pkgerrors.ErrUserNotFound
 	default:
 		return err
 	}

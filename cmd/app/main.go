@@ -135,6 +135,7 @@ func main() {
 		auth.POST("/signin", authHandler.SignIn)
 		auth.POST("/forgot-password", authHandler.ForgotPassword)
 		auth.POST("/confirm-forgot-password", authHandler.ConfirmForgotPassword)
+		auth.GET("/me", authHandler.GetUser)
 	}
 
 	// Start server with graceful shutdown

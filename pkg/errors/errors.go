@@ -53,6 +53,7 @@ var (
 	ErrUserAlreadyExists  = errors.New("user already exists")
 	ErrUserNotConfirmed   = errors.New("user is not confirmed")
 	ErrCodeMismatch       = errors.New("confirmation code mismatch")
+	ErrUserNotFound       = errors.New("user not found")
 )
 
 // IsInvalidCredentials checks if error is an invalid credentials error
@@ -73,4 +74,9 @@ func IsUserNotConfirmed(err error) bool {
 // IsCodeMismatch checks if error is a code mismatch error
 func IsCodeMismatch(err error) bool {
 	return errors.Is(err, ErrCodeMismatch)
+}
+
+// IsUserNotFound checks if error is a user not found error
+func IsUserNotFound(err error) bool {
+	return errors.Is(err, ErrUserNotFound)
 }

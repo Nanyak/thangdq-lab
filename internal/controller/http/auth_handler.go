@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/Nanyak/thangdq-lab/internal/entity"
 	"github.com/Nanyak/thangdq-lab/pkg/errors"
@@ -11,11 +12,12 @@ import (
 
 // AuthService defines the auth use case interface
 type AuthService interface {
-	SignUp(ctx context.Context, email, password, name string) (*entity.AuthResult, error)
+	SignUp(ctx context.Context, username, email, password, name string) (*entity.AuthResult, error)
 	ConfirmSignUp(ctx context.Context, email, confirmationCode string) error
 	SignIn(ctx context.Context, email, password string) (*entity.AuthTokens, error)
 	ForgotPassword(ctx context.Context, email string) error
 	ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error
+	GetUser(ctx context.Context, accessToken string) (*entity.User, error)
 }
 
 // AuthHandler handles authentication HTTP requests
@@ -38,7 +40,7 @@ func (h *AuthHandler) SignUp(c *gin.Context) {
 		return
 	}
 
-	result, err := h.auth.SignUp(c.Request.Context(), req.Email, req.Password, req.Name)
+	result, err := h.auth.SignUp(c.Request.Context(), req.Username, req.Email, req.Password, req.Name)
 	if err != nil {
 		if errors.IsUserAlreadyExists(err) {
 			c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
@@ -138,4 +140,40 @@ func (h *AuthHandler) ConfirmForgotPassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
+}
+
+func (h *AuthHandler) GetUser(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing authorization header"})
+		return
+	}
+
+	accessToken := strings.TrimPrefix(authHeader, "Bearer ")
+	if accessToken == authHeader {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization format"})
+		return
+	}
+
+	user, err := h.auth.GetUser(c.Request.Context(), accessToken)
+	if err != nil {
+		if errors.IsUserNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		if errors.IsInvalidCredentials(err) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user"})
+		return
+	}
+
+	c.JSON(http.StatusOK, UserResponse{
+		ID:            user.ID,
+		Username:      user.Username,
+		Email:         user.Email,
+		Name:          user.Name,
+		EmailVerified: user.EmailVerified,
+	})
 }

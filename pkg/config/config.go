@@ -44,11 +44,14 @@ type S3Config struct {
 }
 
 type CognitoConfig struct {
-	UserPoolID  string
-	ClientID    string
-	ClientSecret  string
-	Region      string
+	UserPoolID   string
+	TokenUrl     string
+	JWTIssuerUrl string
+	ClientID     string
+	ClientSecret string
+	Region       string
 }
+
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
@@ -76,6 +79,8 @@ func Load() (*Config, error) {
 		},
 		Cognito: CognitoConfig{
 			UserPoolID:   getEnv("COGNITO_USER_POOL_ID", ""),
+			TokenUrl:     getEnv("COGNITO_TOKEN_URL", ""),
+			JWTIssuerUrl: getEnv("COGNITO_JWT_ISSUER_URL", ""),
 			ClientID:     getEnv("COGNITO_CLIENT_ID", ""),
 			ClientSecret: getEnv("COGNITO_CLIENT_SECRET", ""),
 			Region:       getEnv("COGNITO_REGION", ""),
