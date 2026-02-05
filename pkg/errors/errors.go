@@ -53,6 +53,7 @@ var (
 	ErrUserAlreadyExists     = errors.New("user already exists")
 	ErrUserNotConfirmed      = errors.New("user is not confirmed")
 	ErrCodeMismatch          = errors.New("confirmation code mismatch")
+	ErrCodeExpired           = errors.New("confirmation code expired")
 	ErrUserNotFound          = errors.New("user not found")
 	ErrAuthChallengeRequired = errors.New("authentication challenge required")
 )
@@ -75,4 +76,9 @@ func IsUserNotConfirmed(err error) bool {
 // IsCodeMismatch checks if error is a code mismatch error
 func IsCodeMismatch(err error) bool {
 	return errors.Is(err, ErrCodeMismatch)
+}
+
+// IsCodeExpired checks if error is a code expired error
+func IsCodeExpired(err error) bool {
+	return errors.Is(err, ErrCodeExpired)
 }

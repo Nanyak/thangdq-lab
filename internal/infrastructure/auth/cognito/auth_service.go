@@ -256,6 +256,7 @@ func mapCognitoError(err error) error {
 	var notAuthorized *types.NotAuthorizedException
 	var userNotConfirmed *types.UserNotConfirmedException
 	var codeMismatch *types.CodeMismatchException
+	var codeExpired *types.ExpiredCodeException
 	var userNotFound *types.UserNotFoundException
 
 	switch {
@@ -267,6 +268,8 @@ func mapCognitoError(err error) error {
 		return pkgerrors.ErrUserNotConfirmed
 	case asError(err, &codeMismatch):
 		return pkgerrors.ErrCodeMismatch
+	case asError(err, &codeExpired):
+		return pkgerrors.ErrCodeExpired
 	case asError(err, &userNotFound):
 		return pkgerrors.ErrUserNotFound
 	default:

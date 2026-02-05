@@ -75,6 +75,10 @@ func (h *AuthHandler) ConfirmSignUp(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid confirmation code"})
 			return
 		}
+		if errors.IsCodeExpired(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Confirmation code has expired. Please request a new code"})
+			return
+		}
 		if errors.IsUserAlreadyExists(err) {
 			c.JSON(http.StatusConflict, gin.H{"error": "User already confirmed"})
 			return
@@ -143,6 +147,10 @@ func (h *AuthHandler) ConfirmForgotPassword(c *gin.Context) {
 	if err := h.auth.ConfirmForgotPassword(c.Request.Context(), req.Email, req.Code, req.NewPassword); err != nil {
 		if errors.IsCodeMismatch(err) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid confirmation code"})
+			return
+		}
+		if errors.IsCodeExpired(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Reset code has expired. Please request a new code"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset password"})
