@@ -46,8 +46,12 @@ type SignUpResponse struct {
 }
 
 type ConfirmSignUpRequest struct {
-	Email            string `json:"email" binding:"required,email"`
+	Username         string `json:"username" binding:"required"`
 	ConfirmationCode string `json:"confirmation_code" binding:"required"`
+}
+
+type ResendConfirmationCodeRequest struct {
+	Username string `json:"username" binding:"required"`
 }
 
 type SignInRequest struct {

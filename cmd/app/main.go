@@ -138,6 +138,7 @@ func main() {
 	{
 		auth.POST("/signup", authHandler.SignUp)
 		auth.POST("/confirm-signup", authHandler.ConfirmSignUp)
+		auth.POST("/resend-confirmation-code", authHandler.ResendConfirmationCode)
 		auth.POST("/signin", authHandler.SignIn)
 		auth.POST("/forgot-password", authHandler.ForgotPassword)
 		auth.POST("/confirm-forgot-password", authHandler.ConfirmForgotPassword)

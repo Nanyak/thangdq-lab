@@ -14,7 +14,8 @@ import (
 // AuthService defines the auth use case interface
 type AuthService interface {
 	SignUp(ctx context.Context, username, email, password, name string) (*entity.AuthResult, error)
-	ConfirmSignUp(ctx context.Context, email, confirmationCode string) error
+	ConfirmSignUp(ctx context.Context, username, confirmationCode string) error
+	ResendConfirmationCode(ctx context.Context, username string) error
 	SignIn(ctx context.Context, email, password string) (*entity.AuthTokens, error)
 	ForgotPassword(ctx context.Context, email string) error
 	ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error
@@ -69,7 +70,7 @@ func (h *AuthHandler) ConfirmSignUp(c *gin.Context) {
 		return
 	}
 
-	if err := h.auth.ConfirmSignUp(c.Request.Context(), req.Email, req.ConfirmationCode); err != nil {
+	if err := h.auth.ConfirmSignUp(c.Request.Context(), req.Username, req.ConfirmationCode); err != nil {
 		log.Printf("ConfirmSignUp error: %v", err)
 		if errors.IsCodeMismatch(err) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid confirmation code"})
@@ -88,6 +89,27 @@ func (h *AuthHandler) ConfirmSignUp(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Account confirmed successfully"})
+}
+
+// ResendConfirmationCode handles resending the confirmation code
+func (h *AuthHandler) ResendConfirmationCode(c *gin.Context) {
+	var req ResendConfirmationCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.auth.ResendConfirmationCode(c.Request.Context(), req.Username); err != nil {
+		log.Printf("ResendConfirmationCode error: %v", err)
+		if errors.IsUserNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resend confirmation code"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Confirmation code sent"})
 }
 
 // SignIn handles user authentication

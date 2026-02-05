@@ -9,7 +9,8 @@ import (
 // AuthProvider defines the interface for authentication operations
 type AuthProvider interface {
 	SignUp(ctx context.Context, username, email, password, name string) (*entity.AuthResult, error)
-	ConfirmSignUp(ctx context.Context, email, confirmationCode string) error
+	ConfirmSignUp(ctx context.Context, username, confirmationCode string) error
+	ResendConfirmationCode(ctx context.Context, username string) error
 	SignIn(ctx context.Context, email, password string) (*entity.AuthTokens, error)
 	ForgotPassword(ctx context.Context, email string) error
 	ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error
@@ -37,8 +38,13 @@ func (a *Auth) SignUp(ctx context.Context, username, email, password, name strin
 }
 
 // ConfirmSignUp confirms a user's registration with a verification code
-func (a *Auth) ConfirmSignUp(ctx context.Context, email, confirmationCode string) error {
-	return a.provider.ConfirmSignUp(ctx, email, confirmationCode)
+func (a *Auth) ConfirmSignUp(ctx context.Context, username, confirmationCode string) error {
+	return a.provider.ConfirmSignUp(ctx, username, confirmationCode)
+}
+
+// ResendConfirmationCode resends the confirmation code to a user
+func (a *Auth) ResendConfirmationCode(ctx context.Context, username string) error {
+	return a.provider.ResendConfirmationCode(ctx, username)
 }
 
 // SignIn authenticates a user and returns tokens

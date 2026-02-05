@@ -78,17 +78,33 @@ func (s *CognitoService) SignUp(ctx context.Context, username, email, password, 
 	}, nil
 }
 
-func (s *CognitoService) ConfirmSignUp(ctx context.Context, email, confirmationCode string) error {
-	secretHash := s.computeSecretHash(email)
+func (s *CognitoService) ConfirmSignUp(ctx context.Context, username, confirmationCode string) error {
+	secretHash := s.computeSecretHash(username)
 
 	input := &cip.ConfirmSignUpInput{
 		ClientId:         &s.clientID,
-		Username:         &email,
+		Username:         &username,
 		ConfirmationCode: &confirmationCode,
 		SecretHash:       &secretHash,
 	}
 
 	_, err := s.client.ConfirmSignUp(ctx, input)
+	if err != nil {
+		return mapCognitoError(err)
+	}
+	return nil
+}
+
+func (s *CognitoService) ResendConfirmationCode(ctx context.Context, username string) error {
+	secretHash := s.computeSecretHash(username)
+
+	input := &cip.ResendConfirmationCodeInput{
+		ClientId:   &s.clientID,
+		Username:   &username,
+		SecretHash: &secretHash,
+	}
+
+	_, err := s.client.ResendConfirmationCode(ctx, input)
 	if err != nil {
 		return mapCognitoError(err)
 	}

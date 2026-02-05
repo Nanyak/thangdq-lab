@@ -82,3 +82,8 @@ func IsCodeMismatch(err error) bool {
 func IsCodeExpired(err error) bool {
 	return errors.Is(err, ErrCodeExpired)
 }
+
+// IsUserNotFound checks if error is a user not found error
+func IsUserNotFound(err error) bool {
+	return errors.Is(err, ErrUserNotFound)
+}
