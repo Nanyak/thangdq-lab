@@ -72,10 +72,6 @@ func (h *AuthHandler) ConfirmSignUp(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid confirmation code"})
 			return
 		}
-		if errors.IsUserNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-			return
-		}
 		if errors.IsUserAlreadyExists(err) {
 			c.JSON(http.StatusConflict, gin.H{"error": "User already confirmed"})
 			return
