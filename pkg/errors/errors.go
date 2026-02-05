@@ -11,10 +11,10 @@ var (
 
 // Storage errors
 var (
-	ErrFileNotFound    = errors.New("file not found")
-	ErrUploadFailed    = errors.New("upload failed")
-	ErrDownloadFailed  = errors.New("download failed")
-	ErrDeleteFailed    = errors.New("delete failed")
+	ErrFileNotFound   = errors.New("file not found")
+	ErrUploadFailed   = errors.New("upload failed")
+	ErrDownloadFailed = errors.New("download failed")
+	ErrDeleteFailed   = errors.New("delete failed")
 )
 
 // IsNotFound checks if error is a not found error
@@ -75,9 +75,4 @@ func IsUserNotConfirmed(err error) bool {
 // IsCodeMismatch checks if error is a code mismatch error
 func IsCodeMismatch(err error) bool {
 	return errors.Is(err, ErrCodeMismatch)
-}
-
-// IsUserNotFound checks if error is a user not found error
-func IsUserNotFound(err error) bool {
-	return errors.Is(err, ErrUserNotFound)
 }
