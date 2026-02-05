@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Nanyak/thangdq-lab/internal/entity"
@@ -32,13 +33,18 @@ func NewStorageHandler(storage StorageService) *StorageHandler {
 
 // UploadFile handles file upload via multipart/form-data
 func (h *StorageHandler) UploadFile(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No file provided"})
 		return
 	}
 
-	// Open the uploaded file
 	src, err := file.Open()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file"})
@@ -46,20 +52,18 @@ func (h *StorageHandler) UploadFile(c *gin.Context) {
 	}
 	defer src.Close()
 
-	// Use filename as key
-	key := file.Filename
+	// Prefix key with userId
+	key := userID.(string) + "/" + file.Filename
 	contentType := file.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 
-	// Upload to storage
 	if err := h.storage.Upload(c.Request.Context(), key, src, contentType); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload file"})
 		return
 	}
 
-	// Generate presigned URL for immediate access (1 hour expiry)
 	url, err := h.storage.GetURL(c.Request.Context(), key, time.Hour)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate URL"})
@@ -67,16 +71,23 @@ func (h *StorageHandler) UploadFile(c *gin.Context) {
 	}
 
 	resp := UploadFileResponse{
-		Key: key,
+		Key: file.Filename, // Return original filename to client
 		URL: url,
 	}
 
 	c.JSON(http.StatusOK, resp)
 }
 
-// ListFiles returns all files matching the optional prefix
+// ListFiles returns all files for the authenticated user
 func (h *StorageHandler) ListFiles(c *gin.Context) {
-	prefix := c.Query("prefix")
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	// Always filter by user's prefix
+	prefix := userID.(string) + "/"
 
 	files, err := h.storage.List(c.Request.Context(), prefix)
 	if err != nil {
@@ -84,11 +95,12 @@ func (h *StorageHandler) ListFiles(c *gin.Context) {
 		return
 	}
 
-	// Convert entity.File to FileInfo DTOs
 	fileInfos := make([]FileInfo, 0, len(files))
 	for _, f := range files {
+		// Strip userId prefix from key for client
+		displayKey := strings.TrimPrefix(f.Key, prefix)
 		fileInfos = append(fileInfos, FileInfo{
-			Key:          f.Key,
+			Key:          displayKey,
 			Size:         f.Size,
 			ContentType:  f.ContentType,
 			LastModified: f.LastModified.Format(time.RFC3339),
@@ -104,13 +116,22 @@ func (h *StorageHandler) ListFiles(c *gin.Context) {
 
 // DeleteFile removes a file from storage
 func (h *StorageHandler) DeleteFile(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
 	key := c.Param("key")
 	if key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "File key is required"})
 		return
 	}
 
-	if err := h.storage.Delete(c.Request.Context(), key); err != nil {
+	// Construct full key with userId prefix
+	fullKey := userID.(string) + "/" + key
+
+	if err := h.storage.Delete(c.Request.Context(), fullKey); err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
 			return
@@ -124,15 +145,23 @@ func (h *StorageHandler) DeleteFile(c *gin.Context) {
 
 // GetPresignedURL generates a presigned download URL
 func (h *StorageHandler) GetPresignedURL(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
 	key := c.Param("key")
 	if key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "File key is required"})
 		return
 	}
 
-	// Generate presigned URL with 1 hour expiration
+	// Construct full key with userId prefix
+	fullKey := userID.(string) + "/" + key
+
 	expiration := time.Hour
-	url, err := h.storage.GetURL(c.Request.Context(), key, expiration)
+	url, err := h.storage.GetURL(c.Request.Context(), fullKey, expiration)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})

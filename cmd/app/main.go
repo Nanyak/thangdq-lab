@@ -117,14 +117,20 @@ func main() {
 	})
 	router.GET("/r/:shortUrl", handler.RedirectURL)
 
-	// Storage routes
+	// API routes
 	api := router.Group("/v1/api")
 	{
 		api.POST("/url", handler.CreateShortURL)
-		api.POST("/files", storageHandler.UploadFile)
-		api.GET("/files", storageHandler.ListFiles)
-		api.DELETE("/files/:key", storageHandler.DeleteFile)
-		api.GET("/files/:key/url", storageHandler.GetPresignedURL)
+	}
+
+	// Storage routes (protected)
+	files := api.Group("/files")
+	files.Use(httphandler.AuthMiddleware(authUsecase))
+	{
+		files.POST("", storageHandler.UploadFile)
+		files.GET("", storageHandler.ListFiles)
+		files.DELETE("/:key", storageHandler.DeleteFile)
+		files.GET("/:key/url", storageHandler.GetPresignedURL)
 	}
 
 	// Auth routes
