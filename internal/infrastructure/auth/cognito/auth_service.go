@@ -54,11 +54,11 @@ func NewCognitoService(cfg *config.CognitoConfig) (*CognitoService, error) {
 }
 
 func (s *CognitoService) SignUp(ctx context.Context, username, email, password, name string) (*entity.AuthResult, error) {
-	secretHash := s.computeSecretHash(email)
+	secretHash := s.computeSecretHash(username)
 
 	input := &cip.SignUpInput{
 		ClientId:   &s.clientID,
-		Username:   &email,
+		Username:   &username,
 		Password:   &password,
 		SecretHash: &secretHash,
 		UserAttributes: []types.AttributeType{
