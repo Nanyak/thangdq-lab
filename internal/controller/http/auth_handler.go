@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
@@ -45,6 +46,7 @@ func (h *AuthHandler) SignUp(c *gin.Context) {
 
 	result, err := h.auth.SignUp(c.Request.Context(), req.Username, req.Email, req.Password, req.Name)
 	if err != nil {
+		log.Printf("SignUp error: %v", err)
 		if errors.IsUserAlreadyExists(err) {
 			c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
 			return

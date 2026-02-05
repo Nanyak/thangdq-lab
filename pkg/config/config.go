@@ -114,6 +114,24 @@ func (c *Config) Validate() error {
 	if c.S3.SecretAccessKey == "" {
 		return fmt.Errorf("AWS_SECRET_ACCESS_KEY is required")
 	}
+	if c.Cognito.UserPoolID == "" {
+		return fmt.Errorf("COGNITO_USER_POOL_ID is required")
+	}
+	if c.Cognito.ClientID == "" {
+		return fmt.Errorf("COGNITO_CLIENT_ID is required")
+	}
+	if c.Cognito.ClientSecret == "" {
+		return fmt.Errorf("COGNITO_CLIENT_SECRET is required")
+	}
+	if c.Cognito.Region == "" {
+		return fmt.Errorf("COGNITO_REGION is required")
+	}
+	if c.Cognito.TokenUrl == "" {
+		return fmt.Errorf("COGNITO_TOKEN_URL is required")
+	}
+	if c.Cognito.JWTIssuerUrl == "" {
+		return fmt.Errorf("COGNITO_JWT_ISSUER_URL is required")
+	}
 	return nil
 }
 
