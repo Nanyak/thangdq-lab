@@ -70,6 +70,7 @@ func (h *AuthHandler) ConfirmSignUp(c *gin.Context) {
 	}
 
 	if err := h.auth.ConfirmSignUp(c.Request.Context(), req.Email, req.ConfirmationCode); err != nil {
+		log.Printf("ConfirmSignUp error: %v", err)
 		if errors.IsCodeMismatch(err) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid confirmation code"})
 			return
