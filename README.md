@@ -5,7 +5,8 @@ Backend API for Stuffsy - a collection of useful online tools.
 ## Features
 
 - **URL Shortener** - Shorten long URLs with custom short codes
-- **Cloud Storage** - Upload, download, and manage files via S3
+- **Cloud Storage** - Upload, download, and manage files via S3 (user-scoped)
+- **Authentication** - AWS Cognito authentication with JWT tokens
 
 ## Tech Stack
 
@@ -14,6 +15,7 @@ Backend API for Stuffsy - a collection of useful online tools.
 - MongoDB (URL storage)
 - Redis (caching)
 - AWS S3 (file storage)
+- AWS Cognito (authentication)
 
 ## Getting Started
 
@@ -52,6 +54,9 @@ cp .env.sample .env
 | `AWS_ACCESS_KEY_ID` | AWS access key | - |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key | - |
 | `S3_ENDPOINT` | Custom S3 endpoint (optional) | - |
+| `COGNITO_USER_POOL_ID` | Cognito user pool ID | - |
+| `COGNITO_CLIENT_ID` | Cognito app client ID | - |
+| `COGNITO_CLIENT_SECRET` | Cognito app client secret | - |
 
 ### Running
 
@@ -74,14 +79,29 @@ docker-compose up -d
 | `POST` | `/url` | Create short URL |
 | `GET` | `/:shortUrl` | Redirect to original URL |
 
-### Cloud Storage
+### Authentication
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/files` | Upload file (multipart/form-data) |
-| `GET` | `/files` | List files (query: `prefix`) |
-| `DELETE` | `/files/:key` | Delete file |
-| `GET` | `/files/:key/url` | Get presigned download URL |
+| `POST` | `/v1/api/auth/signup` | Register new user |
+| `POST` | `/v1/api/auth/confirm-signup` | Confirm email with code |
+| `POST` | `/v1/api/auth/signin` | Sign in, returns tokens |
+| `POST` | `/v1/api/auth/forgot-password` | Request password reset |
+| `POST` | `/v1/api/auth/confirm-forgot-password` | Reset password with code |
+| `POST` | `/v1/api/auth/refresh` | Refresh access token |
+| `GET` | `/v1/api/auth/me` | Get current user (protected) |
+| `POST` | `/v1/api/auth/signout` | Sign out (protected) |
+
+### Cloud Storage (Protected)
+
+Requires `Authorization: Bearer <access_token>` header. Files are scoped to the authenticated user.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/v1/api/files` | Upload file (multipart/form-data) |
+| `GET` | `/v1/api/files` | List user's files |
+| `DELETE` | `/v1/api/files/:key` | Delete file |
+| `GET` | `/v1/api/files/:key/url` | Get presigned download URL |
 
 ## Project Structure
 
@@ -91,6 +111,8 @@ stuffsy-api/
 ├── internal/
 │   ├── controller/   # HTTP handlers
 │   ├── entity/       # Domain entities
+│   ├── infrastructure/
+│   │   └── auth/     # Cognito authentication
 │   ├── repository/   # Data access (MongoDB, Redis, S3)
 │   └── usecase/      # Business logic
 └── pkg/
