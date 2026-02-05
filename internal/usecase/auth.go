@@ -14,6 +14,9 @@ type AuthProvider interface {
 	ForgotPassword(ctx context.Context, email string) error
 	ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error
 	GetUser(ctx context.Context, accessToken string) (*entity.User, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*entity.AuthTokens, error)
+	SignOut(ctx context.Context, accessToken string) error
+	ValidateToken(tokenString string) (map[string]interface{}, error)
 }
 
 // Auth wraps the AuthProvider interface for business logic
@@ -55,4 +58,16 @@ func (a *Auth) ConfirmForgotPassword(ctx context.Context, email, code, newPasswo
 
 func (a *Auth) GetUser(ctx context.Context, accessToken string) (*entity.User, error) {
 	return a.provider.GetUser(ctx, accessToken)
+}
+
+func (a *Auth) RefreshToken(ctx context.Context, refreshToken string) (*entity.AuthTokens, error) {
+	return a.provider.RefreshToken(ctx, refreshToken)
+}
+
+func (a *Auth) SignOut(ctx context.Context, accessToken string) error {
+	return a.provider.SignOut(ctx, accessToken)
+}
+
+func (a *Auth) ValidateToken(tokenString string) (map[string]interface{}, error) {
+	return a.provider.ValidateToken(tokenString)
 }

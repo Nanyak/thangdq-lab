@@ -135,7 +135,15 @@ func main() {
 		auth.POST("/signin", authHandler.SignIn)
 		auth.POST("/forgot-password", authHandler.ForgotPassword)
 		auth.POST("/confirm-forgot-password", authHandler.ConfirmForgotPassword)
-		auth.GET("/me", authHandler.GetUser)
+		auth.POST("/refresh", authHandler.RefreshToken)
+
+		// Protected auth routes
+		authProtected := auth.Group("")
+		authProtected.Use(httphandler.AuthMiddleware(authUsecase))
+		{
+			authProtected.GET("/me", authHandler.GetUser)
+			authProtected.POST("/signout", authHandler.SignOut)
+		}
 	}
 
 	// Start server with graceful shutdown

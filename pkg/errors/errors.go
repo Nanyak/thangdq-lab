@@ -49,11 +49,12 @@ func IsDeleteFailed(err error) bool {
 
 // Auth errors
 var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrUserAlreadyExists  = errors.New("user already exists")
-	ErrUserNotConfirmed   = errors.New("user is not confirmed")
-	ErrCodeMismatch       = errors.New("confirmation code mismatch")
-	ErrUserNotFound       = errors.New("user not found")
+	ErrInvalidCredentials    = errors.New("invalid credentials")
+	ErrUserAlreadyExists     = errors.New("user already exists")
+	ErrUserNotConfirmed      = errors.New("user is not confirmed")
+	ErrCodeMismatch          = errors.New("confirmation code mismatch")
+	ErrUserNotFound          = errors.New("user not found")
+	ErrAuthChallengeRequired = errors.New("authentication challenge required")
 )
 
 // IsInvalidCredentials checks if error is an invalid credentials error

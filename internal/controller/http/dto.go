@@ -79,3 +79,7 @@ type UserResponse struct {
 	Name          string `json:"name"`
 	EmailVerified bool   `json:"email_verified"`
 }
+
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}

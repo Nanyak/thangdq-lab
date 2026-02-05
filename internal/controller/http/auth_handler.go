@@ -18,6 +18,9 @@ type AuthService interface {
 	ForgotPassword(ctx context.Context, email string) error
 	ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error
 	GetUser(ctx context.Context, accessToken string) (*entity.User, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*entity.AuthTokens, error)
+	SignOut(ctx context.Context, accessToken string) error
+	ValidateToken(tokenString string) (map[string]interface{}, error)
 }
 
 // AuthHandler handles authentication HTTP requests
@@ -176,4 +179,54 @@ func (h *AuthHandler) GetUser(c *gin.Context) {
 		Name:          user.Name,
 		EmailVerified: user.EmailVerified,
 	})
+}
+
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
+	var req RefreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tokens, err := h.auth.RefreshToken(c.Request.Context(), req.RefreshToken)
+	if err != nil {
+		if errors.IsInvalidCredentials(err) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to refresh token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, AuthTokensResponse{
+		AccessToken:  tokens.AccessToken,
+		IDToken:      tokens.IDToken,
+		RefreshToken: tokens.RefreshToken,
+		ExpiresIn:    tokens.ExpiresIn,
+	})
+}
+
+func (h *AuthHandler) SignOut(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing authorization header"})
+		return
+	}
+
+	accessToken := strings.TrimPrefix(authHeader, "Bearer ")
+	if accessToken == authHeader {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization format"})
+		return
+	}
+
+	if err := h.auth.SignOut(c.Request.Context(), accessToken); err != nil {
+		if errors.IsInvalidCredentials(err) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sign out"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Signed out successfully"})
 }

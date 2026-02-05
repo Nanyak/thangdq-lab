@@ -6,29 +6,29 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 
 	"github.com/Nanyak/thangdq-lab/internal/entity"
 	"github.com/Nanyak/thangdq-lab/pkg/config"
 	pkgerrors "github.com/Nanyak/thangdq-lab/pkg/errors"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	cip "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	jwxjwt "github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-// CognitoService implements the AuthProvider interface using AWS Cognito
 type CognitoService struct {
 	client       *cip.Client
 	userPoolID   string
 	clientID     string
 	clientSecret string
-	tokenUrl     string
+	jwkUrl       string
 	jwtIssuerUrl string
 	jwkSet       jwk.Set
 }
 
-// NewCognitoService creates a new CognitoService instance
 func NewCognitoService(cfg *config.CognitoConfig) (*CognitoService, error) {
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(),
 		awsconfig.WithRegion(cfg.Region),
@@ -44,15 +44,15 @@ func NewCognitoService(cfg *config.CognitoConfig) (*CognitoService, error) {
 
 	return &CognitoService{
 		client:       client,
+		userPoolID:   cfg.UserPoolID,
 		clientID:     cfg.ClientID,
 		clientSecret: cfg.ClientSecret,
-		tokenUrl:     cfg.TokenUrl,
+		jwkUrl:       cfg.TokenUrl,
 		jwtIssuerUrl: cfg.JWTIssuerUrl,
 		jwkSet:       keySet,
 	}, nil
 }
 
-// SignUp registers a new user in Cognito
 func (s *CognitoService) SignUp(ctx context.Context, username, email, password, name string) (*entity.AuthResult, error) {
 	secretHash := s.computeSecretHash(username)
 
@@ -62,8 +62,8 @@ func (s *CognitoService) SignUp(ctx context.Context, username, email, password, 
 		Password:   &password,
 		SecretHash: &secretHash,
 		UserAttributes: []types.AttributeType{
-			{Name: strPtr("email"), Value: &email},
-			{Name: strPtr("name"), Value: &name},
+			{Name: aws.String("email"), Value: &email},
+			{Name: aws.String("name"), Value: &name},
 		},
 	}
 
@@ -78,7 +78,6 @@ func (s *CognitoService) SignUp(ctx context.Context, username, email, password, 
 	}, nil
 }
 
-// ConfirmSignUp confirms a user's registration with a verification code
 func (s *CognitoService) ConfirmSignUp(ctx context.Context, email, confirmationCode string) error {
 	secretHash := s.computeSecretHash(email)
 
@@ -96,7 +95,6 @@ func (s *CognitoService) ConfirmSignUp(ctx context.Context, email, confirmationC
 	return nil
 }
 
-// SignIn authenticates a user and returns tokens
 func (s *CognitoService) SignIn(ctx context.Context, email, password string) (*entity.AuthTokens, error) {
 	secretHash := s.computeSecretHash(email)
 
@@ -115,6 +113,10 @@ func (s *CognitoService) SignIn(ctx context.Context, email, password string) (*e
 		return nil, mapCognitoError(err)
 	}
 
+	if output.AuthenticationResult == nil {
+		return nil, pkgerrors.ErrAuthChallengeRequired
+	}
+
 	result := output.AuthenticationResult
 	return &entity.AuthTokens{
 		AccessToken:  *result.AccessToken,
@@ -124,7 +126,6 @@ func (s *CognitoService) SignIn(ctx context.Context, email, password string) (*e
 	}, nil
 }
 
-// ForgotPassword initiates a password reset flow
 func (s *CognitoService) ForgotPassword(ctx context.Context, email string) error {
 	secretHash := s.computeSecretHash(email)
 
@@ -141,7 +142,6 @@ func (s *CognitoService) ForgotPassword(ctx context.Context, email string) error
 	return nil
 }
 
-// ConfirmForgotPassword completes the password reset with a confirmation code
 func (s *CognitoService) ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error {
 	secretHash := s.computeSecretHash(email)
 
@@ -184,14 +184,73 @@ func (s *CognitoService) GetUser(ctx context.Context, accessToken string) (*enti
 	return user, nil
 }
 
-// computeSecretHash generates the SECRET_HASH for Cognito API calls
+func (s *CognitoService) RefreshToken(ctx context.Context, refreshToken string) (*entity.AuthTokens, error) {
+	input := &cip.InitiateAuthInput{
+		AuthFlow: types.AuthFlowTypeRefreshTokenAuth,
+		ClientId: &s.clientID,
+		AuthParameters: map[string]string{
+			"REFRESH_TOKEN": refreshToken,
+		},
+	}
+
+	output, err := s.client.InitiateAuth(ctx, input)
+	if err != nil {
+		return nil, mapCognitoError(err)
+	}
+
+	if output.AuthenticationResult == nil {
+		return nil, pkgerrors.ErrAuthChallengeRequired
+	}
+
+	result := output.AuthenticationResult
+	tokens := &entity.AuthTokens{
+		AccessToken: *result.AccessToken,
+		IDToken:     *result.IdToken,
+		ExpiresIn:   result.ExpiresIn,
+	}
+	if result.RefreshToken != nil {
+		tokens.RefreshToken = *result.RefreshToken
+	} else {
+		tokens.RefreshToken = refreshToken
+	}
+	return tokens, nil
+}
+
+func (s *CognitoService) SignOut(ctx context.Context, accessToken string) error {
+	_, err := s.client.GlobalSignOut(ctx, &cip.GlobalSignOutInput{
+		AccessToken: &accessToken,
+	})
+	if err != nil {
+		return mapCognitoError(err)
+	}
+	return nil
+}
+
+// ValidateToken validates a JWT token string and returns its claims
+func (s *CognitoService) ValidateToken(tokenString string) (map[string]interface{}, error) {
+	token, err := jwxjwt.Parse([]byte(tokenString),
+		jwxjwt.WithKeySet(s.jwkSet),
+		jwxjwt.WithIssuer(s.jwtIssuerUrl),
+		jwxjwt.WithValidate(true),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+
+	claims, err := token.AsMap(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract claims: %w", err)
+	}
+
+	return claims, nil
+}
+
 func (s *CognitoService) computeSecretHash(username string) string {
 	mac := hmac.New(sha256.New, []byte(s.clientSecret))
 	mac.Write([]byte(username + s.clientID))
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// mapCognitoError maps Cognito SDK errors to domain errors
 func mapCognitoError(err error) error {
 	var usernameExists *types.UsernameExistsException
 	var notAuthorized *types.NotAuthorizedException
@@ -217,8 +276,4 @@ func mapCognitoError(err error) error {
 
 func asError[T error](err error, target *T) bool {
 	return errors.As(err, target)
-}
-
-func strPtr(s string) *string {
-	return &s
 }
