@@ -122,10 +122,6 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	}
 
 	if err := h.auth.ForgotPassword(c.Request.Context(), req.Email); err != nil {
-		if errors.IsUserNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-			return
-		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initiate password reset"})
 		return
 	}
@@ -144,10 +140,6 @@ func (h *AuthHandler) ConfirmForgotPassword(c *gin.Context) {
 	if err := h.auth.ConfirmForgotPassword(c.Request.Context(), req.Email, req.Code, req.NewPassword); err != nil {
 		if errors.IsCodeMismatch(err) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid confirmation code"})
-			return
-		}
-		if errors.IsUserNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset password"})
@@ -172,10 +164,6 @@ func (h *AuthHandler) GetUser(c *gin.Context) {
 
 	user, err := h.auth.GetUser(c.Request.Context(), accessToken)
 	if err != nil {
-		if errors.IsUserNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-			return
-		}
 		if errors.IsInvalidCredentials(err) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			return
