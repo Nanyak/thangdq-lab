@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/Nanyak/thangdq-lab/internal/entity"
 	pkgerrors "github.com/Nanyak/thangdq-lab/pkg/errors"
@@ -21,8 +22,8 @@ type MockURLShortener struct {
 	mock.Mock
 }
 
-func (m *MockURLShortener) CreateShortURL(ctx context.Context, originalURL string) (*entity.Link, error) {
-	args := m.Called(ctx, originalURL)
+func (m *MockURLShortener) CreateShortURL(ctx context.Context, originalURL string, userID string) (*entity.Link, error) {
+	args := m.Called(ctx, originalURL, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -32,6 +33,14 @@ func (m *MockURLShortener) CreateShortURL(ctx context.Context, originalURL strin
 func (m *MockURLShortener) GetOriginalURL(ctx context.Context, shortCode string) (string, error) {
 	args := m.Called(ctx, shortCode)
 	return args.String(0), args.Error(1)
+}
+
+func (m *MockURLShortener) GetUserLinks(ctx context.Context, userID string) ([]*entity.Link, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*entity.Link), args.Error(1)
 }
 
 func setupTestRouter() *gin.Engine {
@@ -64,7 +73,7 @@ func TestCreateShortURL(t *testing.T) {
 				LongURL: "https://google.com",
 			},
 			setupMock: func(m *MockURLShortener) {
-				m.On("CreateShortURL", mock.Anything, "https://google.com").Return(&entity.Link{
+				m.On("CreateShortURL", mock.Anything, "https://google.com", "").Return(&entity.Link{
 					ShortCode:   "abc123xy",
 					OriginalURL: "https://google.com",
 				}, nil)
@@ -83,7 +92,7 @@ func TestCreateShortURL(t *testing.T) {
 				LongURL: "http://example.com",
 			},
 			setupMock: func(m *MockURLShortener) {
-				m.On("CreateShortURL", mock.Anything, "http://example.com").Return(&entity.Link{
+				m.On("CreateShortURL", mock.Anything, "http://example.com", "").Return(&entity.Link{
 					ShortCode:   "xyz456ab",
 					OriginalURL: "http://example.com",
 				}, nil)
@@ -102,7 +111,7 @@ func TestCreateShortURL(t *testing.T) {
 				LongURL: "google.com",
 			},
 			setupMock: func(m *MockURLShortener) {
-				m.On("CreateShortURL", mock.Anything, "https://google.com").Return(&entity.Link{
+				m.On("CreateShortURL", mock.Anything, "https://google.com", "").Return(&entity.Link{
 					ShortCode:   "def789gh",
 					OriginalURL: "https://google.com",
 				}, nil)
@@ -147,7 +156,7 @@ func TestCreateShortURL(t *testing.T) {
 				LongURL: "https://example.com",
 			},
 			setupMock: func(m *MockURLShortener) {
-				m.On("CreateShortURL", mock.Anything, "https://example.com").
+				m.On("CreateShortURL", mock.Anything, "https://example.com", "").
 					Return(nil, pkgerrors.ErrDuplicateShortCode)
 			},
 			expectedStatus: http.StatusConflict,
@@ -164,7 +173,7 @@ func TestCreateShortURL(t *testing.T) {
 				LongURL: "https://example.com",
 			},
 			setupMock: func(m *MockURLShortener) {
-				m.On("CreateShortURL", mock.Anything, "https://example.com").
+				m.On("CreateShortURL", mock.Anything, "https://example.com", "").
 					Return(nil, errors.New("database error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
@@ -181,7 +190,7 @@ func TestCreateShortURL(t *testing.T) {
 				LongURL: "  https://example.com  ",
 			},
 			setupMock: func(m *MockURLShortener) {
-				m.On("CreateShortURL", mock.Anything, "https://example.com").Return(&entity.Link{
+				m.On("CreateShortURL", mock.Anything, "https://example.com", "").Return(&entity.Link{
 					ShortCode:   "trim1234",
 					OriginalURL: "https://example.com",
 				}, nil)
@@ -226,6 +235,70 @@ func TestCreateShortURL(t *testing.T) {
 			mockShortener.AssertExpectations(t)
 		})
 	}
+}
+
+func TestGetUserLinks(t *testing.T) {
+	now := time.Now()
+
+	t.Run("success - returns user links", func(t *testing.T) {
+		mockShortener := new(MockURLShortener)
+		links := []*entity.Link{
+			{ShortCode: "abc123xy", OriginalURL: "https://google.com", UserID: "user-1", Title: "Google", CreatedAt: now},
+		}
+		mockShortener.On("GetUserLinks", mock.Anything, "user-1").Return(links, nil)
+
+		handler := NewHandler(mockShortener, "http://localhost:8080")
+		router := setupTestRouter()
+		router.GET("/url", func(c *gin.Context) {
+			c.Set("user_id", "user-1")
+			handler.GetUserLinks(c)
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/url", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp GetUserLinksResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		assert.NoError(t, err)
+		assert.Len(t, resp.Links, 1)
+		assert.Equal(t, "abc123xy", resp.Links[0].ShortCode)
+		assert.Equal(t, "Google", resp.Links[0].Title)
+		mockShortener.AssertExpectations(t)
+	})
+
+	t.Run("error - no user_id in context", func(t *testing.T) {
+		mockShortener := new(MockURLShortener)
+		handler := NewHandler(mockShortener, "http://localhost:8080")
+		router := setupTestRouter()
+		router.GET("/url", handler.GetUserLinks)
+
+		req := httptest.NewRequest(http.MethodGet, "/url", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
+
+	t.Run("error - repository error", func(t *testing.T) {
+		mockShortener := new(MockURLShortener)
+		mockShortener.On("GetUserLinks", mock.Anything, "user-1").Return(nil, errors.New("db error"))
+
+		handler := NewHandler(mockShortener, "http://localhost:8080")
+		router := setupTestRouter()
+		router.GET("/url", func(c *gin.Context) {
+			c.Set("user_id", "user-1")
+			handler.GetUserLinks(c)
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/url", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		mockShortener.AssertExpectations(t)
+	})
 }
 
 func TestRedirectURL(t *testing.T) {
@@ -358,61 +431,17 @@ func TestIsValidShortCode(t *testing.T) {
 		shortCode string
 		expected  bool
 	}{
-		{
-			name:      "valid - 8 alphanumeric chars",
-			shortCode: "abc123XY",
-			expected:  true,
-		},
-		{
-			name:      "valid - all lowercase",
-			shortCode: "abcdefgh",
-			expected:  true,
-		},
-		{
-			name:      "valid - all uppercase",
-			shortCode: "ABCDEFGH",
-			expected:  true,
-		},
-		{
-			name:      "valid - all numbers",
-			shortCode: "12345678",
-			expected:  true,
-		},
-		{
-			name:      "invalid - too short",
-			shortCode: "abc123",
-			expected:  false,
-		},
-		{
-			name:      "invalid - too long",
-			shortCode: "abc123xyz",
-			expected:  false,
-		},
-		{
-			name:      "invalid - special characters",
-			shortCode: "abc@23xy",
-			expected:  false,
-		},
-		{
-			name:      "invalid - with hyphen",
-			shortCode: "abc-23xy",
-			expected:  false,
-		},
-		{
-			name:      "invalid - with underscore",
-			shortCode: "abc_23xy",
-			expected:  false,
-		},
-		{
-			name:      "invalid - empty string",
-			shortCode: "",
-			expected:  false,
-		},
-		{
-			name:      "invalid - with space",
-			shortCode: "abc 23xy",
-			expected:  false,
-		},
+		{"valid - 8 alphanumeric chars", "abc123XY", true},
+		{"valid - all lowercase", "abcdefgh", true},
+		{"valid - all uppercase", "ABCDEFGH", true},
+		{"valid - all numbers", "12345678", true},
+		{"invalid - too short", "abc123", false},
+		{"invalid - too long", "abc123xyz", false},
+		{"invalid - special characters", "abc@23xy", false},
+		{"invalid - with hyphen", "abc-23xy", false},
+		{"invalid - with underscore", "abc_23xy", false},
+		{"invalid - empty string", "", false},
+		{"invalid - with space", "abc 23xy", false},
 	}
 
 	for _, tt := range tests {

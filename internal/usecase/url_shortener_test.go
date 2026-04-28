@@ -30,6 +30,14 @@ func (m *MockURLRepository) FindByShortCode(ctx context.Context, shortCode strin
 	return args.Get(0).(*entity.Link), args.Error(1)
 }
 
+func (m *MockURLRepository) FindByUserID(ctx context.Context, userID string) ([]*entity.Link, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*entity.Link), args.Error(1)
+}
+
 // MockURLCache is a mock implementation of URLCache
 type MockURLCache struct {
 	mock.Mock
@@ -77,13 +85,15 @@ func TestCreateShortURL(t *testing.T) {
 	tests := []struct {
 		name          string
 		inputURL      string
+		userID        string
 		setupMocks    func(*MockURLRepository, *MockURLCache, *MockShortCodeGenerator)
 		expectedLink  *entity.Link
 		expectedError bool
 	}{
 		{
-			name:     "success - cache hit",
+			name:     "success - anonymous cache hit",
 			inputURL: originalURL,
+			userID:   "",
 			setupMocks: func(repo *MockURLRepository, cache *MockURLCache, gen *MockShortCodeGenerator) {
 				gen.On("Generate", originalURL).Return(shortCode)
 				cache.On("Get", ctx, shortCode).Return(originalURL, nil)
@@ -97,6 +107,7 @@ func TestCreateShortURL(t *testing.T) {
 		{
 			name:     "success - cache miss, save to db, cache",
 			inputURL: originalURL,
+			userID:   "",
 			setupMocks: func(repo *MockURLRepository, cache *MockURLCache, gen *MockShortCodeGenerator) {
 				gen.On("Generate", originalURL).Return(shortCode)
 				cache.On("Get", ctx, shortCode).Return("", errors.New("cache miss"))
@@ -113,8 +124,27 @@ func TestCreateShortURL(t *testing.T) {
 			expectedError: false,
 		},
 		{
+			name:     "success - authenticated user, cache miss, save to db",
+			inputURL: originalURL,
+			userID:   "user-123",
+			setupMocks: func(repo *MockURLRepository, cache *MockURLCache, gen *MockShortCodeGenerator) {
+				gen.On("Generate", originalURL).Return(shortCode)
+				repo.On("Save", ctx, mock.MatchedBy(func(link *entity.Link) bool {
+					return link.ShortCode == shortCode && link.OriginalURL == originalURL && link.UserID == "user-123"
+				})).Return(nil)
+				cache.On("Set", ctx, shortCode, originalURL).Return(nil)
+			},
+			expectedLink: &entity.Link{
+				ShortCode:   shortCode,
+				OriginalURL: originalURL,
+				CreatedAt:   now,
+			},
+			expectedError: false,
+		},
+		{
 			name:     "success - duplicate error, fetch existing",
 			inputURL: originalURL,
+			userID:   "",
 			setupMocks: func(repo *MockURLRepository, cache *MockURLCache, gen *MockShortCodeGenerator) {
 				gen.On("Generate", originalURL).Return(shortCode)
 				cache.On("Get", ctx, shortCode).Return("", errors.New("cache miss"))
@@ -137,6 +167,7 @@ func TestCreateShortURL(t *testing.T) {
 		{
 			name:     "success - cache set fails (best effort)",
 			inputURL: originalURL,
+			userID:   "",
 			setupMocks: func(repo *MockURLRepository, cache *MockURLCache, gen *MockShortCodeGenerator) {
 				gen.On("Generate", originalURL).Return(shortCode)
 				cache.On("Get", ctx, shortCode).Return("", errors.New("cache miss"))
@@ -153,6 +184,7 @@ func TestCreateShortURL(t *testing.T) {
 		{
 			name:     "error - save fails with non-duplicate error",
 			inputURL: originalURL,
+			userID:   "",
 			setupMocks: func(repo *MockURLRepository, cache *MockURLCache, gen *MockShortCodeGenerator) {
 				gen.On("Generate", originalURL).Return(shortCode)
 				cache.On("Get", ctx, shortCode).Return("", errors.New("cache miss"))
@@ -164,6 +196,7 @@ func TestCreateShortURL(t *testing.T) {
 		{
 			name:     "error - duplicate error but fetch fails",
 			inputURL: originalURL,
+			userID:   "",
 			setupMocks: func(repo *MockURLRepository, cache *MockURLCache, gen *MockShortCodeGenerator) {
 				gen.On("Generate", originalURL).Return(shortCode)
 				cache.On("Get", ctx, shortCode).Return("", errors.New("cache miss"))
@@ -176,6 +209,7 @@ func TestCreateShortURL(t *testing.T) {
 		{
 			name:     "error - empty originalURL",
 			inputURL: "",
+			userID:   "",
 			setupMocks: func(repo *MockURLRepository, cache *MockURLCache, gen *MockShortCodeGenerator) {
 				gen.On("Generate", "").Return("")
 				cache.On("Get", ctx, "").Return("", errors.New("cache miss"))
@@ -195,7 +229,7 @@ func TestCreateShortURL(t *testing.T) {
 			tt.setupMocks(mockRepo, mockCache, mockGenerator)
 
 			shortener := NewURLShortener(mockRepo, mockCache, mockGenerator)
-			link, err := shortener.CreateShortURL(ctx, tt.inputURL)
+			link, err := shortener.CreateShortURL(ctx, tt.inputURL, tt.userID)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -325,4 +359,38 @@ func TestGetOriginalURL(t *testing.T) {
 			mockCache.AssertExpectations(t)
 		})
 	}
+}
+
+func TestGetUserLinks(t *testing.T) {
+	ctx := context.Background()
+	userID := "user-123"
+
+	t.Run("success - returns user links", func(t *testing.T) {
+		mockRepo := new(MockURLRepository)
+		mockCache := new(MockURLCache)
+		links := []*entity.Link{
+			{ShortCode: "abc123xy", OriginalURL: "https://google.com", UserID: userID},
+		}
+		mockRepo.On("FindByUserID", ctx, userID).Return(links, nil)
+
+		shortener := NewURLShortener(mockRepo, mockCache, new(MockShortCodeGenerator))
+		result, err := shortener.GetUserLinks(ctx, userID)
+
+		assert.NoError(t, err)
+		assert.Len(t, result, 1)
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("error - repository error", func(t *testing.T) {
+		mockRepo := new(MockURLRepository)
+		mockCache := new(MockURLCache)
+		mockRepo.On("FindByUserID", ctx, userID).Return(nil, errors.New("db error"))
+
+		shortener := NewURLShortener(mockRepo, mockCache, new(MockShortCodeGenerator))
+		result, err := shortener.GetUserLinks(ctx, userID)
+
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		mockRepo.AssertExpectations(t)
+	})
 }

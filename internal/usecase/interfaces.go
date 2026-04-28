@@ -9,6 +9,7 @@ import (
 type URLRepository interface {
 	Save(ctx context.Context, link *entity.Link) error
 	FindByShortCode(ctx context.Context, shortCode string) (*entity.Link, error)
+	FindByUserID(ctx context.Context, userID string) ([]*entity.Link, error)
 }
 
 // URLCache defines caching operations for links

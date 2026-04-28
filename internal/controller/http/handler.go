@@ -14,8 +14,9 @@ import (
 
 // URLShortener defines the use case interface at consumer side
 type URLShortener interface {
-	CreateShortURL(ctx context.Context, originalURL string) (*entity.Link, error)
+	CreateShortURL(ctx context.Context, originalURL string, userID string) (*entity.Link, error)
 	GetOriginalURL(ctx context.Context, shortCode string) (string, error)
+	GetUserLinks(ctx context.Context, userID string) ([]*entity.Link, error)
 }
 
 type Handler struct {
@@ -49,8 +50,11 @@ func (h *Handler) CreateShortURL(c *gin.Context) {
 		return
 	}
 
-	// Call use case
-	link, err := h.shortener.CreateShortURL(c.Request.Context(), longURL)
+	// Extract user_id from context (set by OptionalAuthMiddleware, empty if anonymous)
+	userID, _ := c.Get("user_id")
+	userIDStr, _ := userID.(string)
+
+	link, err := h.shortener.CreateShortURL(c.Request.Context(), longURL, userIDStr)
 	if err != nil {
 		if errors.IsDuplicate(err) {
 			c.JSON(http.StatusConflict, gin.H{"error": "Short code already exists"})
@@ -60,12 +64,7 @@ func (h *Handler) CreateShortURL(c *gin.Context) {
 		return
 	}
 
-	// Build response - return short code only (matches old behavior)
-	resp := CreateShortURLResponse{
-		ShortURL: link.ShortCode,
-	}
-
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, CreateShortURLResponse{ShortURL: link.ShortCode})
 }
 
 func (h *Handler) RedirectURL(c *gin.Context) {
@@ -77,7 +76,6 @@ func (h *Handler) RedirectURL(c *gin.Context) {
 		return
 	}
 
-	// Call use case
 	originalURL, err := h.shortener.GetOriginalURL(c.Request.Context(), shortCode)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -89,6 +87,33 @@ func (h *Handler) RedirectURL(c *gin.Context) {
 	}
 
 	c.Redirect(http.StatusMovedPermanently, originalURL)
+}
+
+func (h *Handler) GetUserLinks(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	userIDStr, _ := userID.(string)
+
+	links, err := h.shortener.GetUserLinks(c.Request.Context(), userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
+	dtos := make([]LinkDTO, 0, len(links))
+	for _, l := range links {
+		dtos = append(dtos, LinkDTO{
+			ShortCode:   l.ShortCode,
+			OriginalURL: l.OriginalURL,
+			Title:       l.Title,
+			CreatedAt:   l.CreatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, GetUserLinksResponse{Links: dtos})
 }
 
 var shortCodePattern = regexp.MustCompile(`^[a-zA-Z0-9]{8}$`)

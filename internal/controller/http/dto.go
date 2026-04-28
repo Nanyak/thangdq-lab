@@ -1,11 +1,24 @@
 package http
 
+import "time"
+
 type CreateShortURLRequest struct {
 	LongURL string `json:"long_url" binding:"required"`
 }
 
 type CreateShortURLResponse struct {
 	ShortURL string `json:"short_url"`
+}
+
+type LinkDTO struct {
+	ShortCode   string    `json:"short_code"`
+	OriginalURL string    `json:"original_url"`
+	Title       string    `json:"title"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type GetUserLinksResponse struct {
+	Links []LinkDTO `json:"links"`
 }
 
 // Storage DTOs

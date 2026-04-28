@@ -106,12 +106,12 @@ func main() {
 	// Setup router
 	router := gin.Default()
 	router.Use(cors.New(cors.Config{
-	AllowOrigins:     []string{"https://stuffsy.site"},
-	AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-	AllowHeaders:     []string{"Content-Type", "Authorization"},
-	ExposeHeaders:   []string{"Content-Length"},
-	AllowCredentials: true,
-}))
+		AllowOrigins:     []string{"https://stuffsy.site"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "Hello, World!"})
 	})
@@ -120,7 +120,19 @@ func main() {
 	// API routes
 	api := router.Group("/v1/api")
 	{
-		api.POST("/url", handler.CreateShortURL)
+		// URL shortener: optional auth so logged-in users get history tracking
+		urlRoutes := api.Group("/url")
+		urlRoutes.Use(httphandler.OptionalAuthMiddleware(authUsecase))
+		{
+			urlRoutes.POST("", handler.CreateShortURL)
+		}
+
+		// Protected: user link history
+		urlProtected := api.Group("/url")
+		urlProtected.Use(httphandler.AuthMiddleware(authUsecase))
+		{
+			urlProtected.GET("", handler.GetUserLinks)
+		}
 	}
 
 	// Storage routes (protected)
@@ -129,8 +141,8 @@ func main() {
 	{
 		files.POST("", storageHandler.UploadFile)
 		files.GET("", storageHandler.ListFiles)
-		files.DELETE("", storageHandler.DeleteFile)    // ?key=path/to/file
-		files.GET("/url", storageHandler.GetPresignedURL) // ?key=path/to/file
+		files.DELETE("", storageHandler.DeleteFile)
+		files.GET("/url", storageHandler.GetPresignedURL)
 	}
 
 	// Auth routes
@@ -159,7 +171,6 @@ func main() {
 		Handler: router,
 	}
 
-	// Start server in goroutine
 	go func() {
 		log.Printf("Server starting on port %s", cfg.Server.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -167,14 +178,12 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	log.Println("Shutting down server...")
 
-	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

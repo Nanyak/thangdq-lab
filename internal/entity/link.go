@@ -6,5 +6,7 @@ import "time"
 type Link struct {
 	ShortCode   string
 	OriginalURL string
+	UserID      string
+	Title       string
 	CreatedAt   time.Time
 }

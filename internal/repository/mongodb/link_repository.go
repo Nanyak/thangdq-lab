@@ -18,14 +18,18 @@ type LinkRepository struct {
 func NewLinkRepository(db *mongo.Database, collectionName string) (*LinkRepository, error) {
 	collection := db.Collection(collectionName)
 
-	// Create indexes
-	indexModel := mongo.IndexModel{
-		Keys:    bson.D{{Key: "short_code", Value: 1}},
-		Options: options.Index().SetUnique(true),
+	indexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "short_code", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys: bson.D{{Key: "user_id", Value: 1}},
+		},
 	}
 
-	if _, err := collection.Indexes().CreateOne(context.Background(), indexModel); err != nil {
-		return nil, fmt.Errorf("failed to create index: %w", err)
+	if _, err := collection.Indexes().CreateMany(context.Background(), indexes); err != nil {
+		return nil, fmt.Errorf("failed to create indexes: %w", err)
 	}
 
 	return &LinkRepository{collection: collection}, nil
@@ -58,4 +62,30 @@ func (r *LinkRepository) FindByShortCode(ctx context.Context, shortCode string) 
 	}
 
 	return toEntity(&doc), nil
+}
+
+func (r *LinkRepository) FindByUserID(ctx context.Context, userID string) ([]*entity.Link, error) {
+	filter := bson.M{"user_id": userID}
+	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
+
+	cursor, err := r.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, fmt.Errorf("mongodb find failed: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var links []*entity.Link
+	for cursor.Next(ctx) {
+		var doc LinkDocument
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("mongodb decode failed: %w", err)
+		}
+		links = append(links, toEntity(&doc))
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("mongodb cursor error: %w", err)
+	}
+
+	return links, nil
 }
