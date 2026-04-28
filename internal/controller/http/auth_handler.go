@@ -20,7 +20,7 @@ type AuthService interface {
 	ForgotPassword(ctx context.Context, email string) error
 	ConfirmForgotPassword(ctx context.Context, email, code, newPassword string) error
 	GetUser(ctx context.Context, accessToken string) (*entity.User, error)
-	RefreshToken(ctx context.Context, refreshToken string) (*entity.AuthTokens, error)
+	RefreshToken(ctx context.Context, refreshToken, username string) (*entity.AuthTokens, error)
 	SignOut(ctx context.Context, accessToken string) error
 	ValidateToken(tokenString string) (map[string]interface{}, error)
 }
@@ -221,7 +221,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	tokens, err := h.auth.RefreshToken(c.Request.Context(), req.RefreshToken)
+	tokens, err := h.auth.RefreshToken(c.Request.Context(), req.RefreshToken, req.Username)
 	if err != nil {
 		if errors.IsInvalidCredentials(err) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})

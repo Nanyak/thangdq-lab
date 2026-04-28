@@ -200,12 +200,14 @@ func (s *CognitoService) GetUser(ctx context.Context, accessToken string) (*enti
 	return user, nil
 }
 
-func (s *CognitoService) RefreshToken(ctx context.Context, refreshToken string) (*entity.AuthTokens, error) {
+func (s *CognitoService) RefreshToken(ctx context.Context, refreshToken, username string) (*entity.AuthTokens, error) {
+	secretHash := s.computeSecretHash(username)
 	input := &cip.InitiateAuthInput{
 		AuthFlow: types.AuthFlowTypeRefreshTokenAuth,
 		ClientId: &s.clientID,
 		AuthParameters: map[string]string{
 			"REFRESH_TOKEN": refreshToken,
+			"SECRET_HASH":   secretHash,
 		},
 	}
 

@@ -129,8 +129,8 @@ func main() {
 	{
 		files.POST("", storageHandler.UploadFile)
 		files.GET("", storageHandler.ListFiles)
-		files.DELETE("/:key", storageHandler.DeleteFile)
-		files.GET("/:key/url", storageHandler.GetPresignedURL)
+		files.DELETE("", storageHandler.DeleteFile)    // ?key=path/to/file
+		files.GET("/url", storageHandler.GetPresignedURL) // ?key=path/to/file
 	}
 
 	// Auth routes

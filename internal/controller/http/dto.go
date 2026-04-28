@@ -86,4 +86,5 @@ type UserResponse struct {
 
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
+	Username     string `json:"username" binding:"required"`
 }

@@ -31,7 +31,8 @@ func NewStorageHandler(storage StorageService) *StorageHandler {
 	}
 }
 
-// UploadFile handles file upload via multipart/form-data
+// UploadFile handles file upload via multipart/form-data.
+// Optional form field "path" sets the folder prefix (e.g. "documents/2024").
 func (h *StorageHandler) UploadFile(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -52,30 +53,38 @@ func (h *StorageHandler) UploadFile(c *gin.Context) {
 	}
 	defer src.Close()
 
-	// Prefix key with userId
-	key := userID.(string) + "/" + file.Filename
+	// Optional folder path; sanitize to prevent path traversal
+	folderPath := sanitizePath(strings.TrimSpace(c.PostForm("path")))
+
+	var objectKey string
+	if folderPath != "" {
+		objectKey = userID.(string) + "/" + folderPath + "/" + file.Filename
+	} else {
+		objectKey = userID.(string) + "/" + file.Filename
+	}
+
 	contentType := file.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 
-	if err := h.storage.Upload(c.Request.Context(), key, src, contentType); err != nil {
+	if err := h.storage.Upload(c.Request.Context(), objectKey, src, contentType); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload file"})
 		return
 	}
 
-	url, err := h.storage.GetURL(c.Request.Context(), key, time.Hour)
+	url, err := h.storage.GetURL(c.Request.Context(), objectKey, time.Hour)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate URL"})
 		return
 	}
 
-	resp := UploadFileResponse{
-		Key: file.Filename, // Return original filename to client
+	// Return key relative to user prefix
+	displayKey := objectKey[len(userID.(string))+1:]
+	c.JSON(http.StatusOK, UploadFileResponse{
+		Key: displayKey,
 		URL: url,
-	}
-
-	c.JSON(http.StatusOK, resp)
+	})
 }
 
 // ListFiles returns all files for the authenticated user
@@ -86,7 +95,6 @@ func (h *StorageHandler) ListFiles(c *gin.Context) {
 		return
 	}
 
-	// Always filter by user's prefix
 	prefix := userID.(string) + "/"
 
 	files, err := h.storage.List(c.Request.Context(), prefix)
@@ -97,7 +105,6 @@ func (h *StorageHandler) ListFiles(c *gin.Context) {
 
 	fileInfos := make([]FileInfo, 0, len(files))
 	for _, f := range files {
-		// Strip userId prefix from key for client
 		displayKey := strings.TrimPrefix(f.Key, prefix)
 		fileInfos = append(fileInfos, FileInfo{
 			Key:          displayKey,
@@ -107,14 +114,10 @@ func (h *StorageHandler) ListFiles(c *gin.Context) {
 		})
 	}
 
-	resp := ListFilesResponse{
-		Files: fileInfos,
-	}
-
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, ListFilesResponse{Files: fileInfos})
 }
 
-// DeleteFile removes a file from storage
+// DeleteFile removes a file from storage. Uses query param "key".
 func (h *StorageHandler) DeleteFile(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -122,14 +125,13 @@ func (h *StorageHandler) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	key := c.Param("key")
+	key := c.Query("key")
 	if key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "File key is required"})
 		return
 	}
 
-	// Construct full key with userId prefix
-	fullKey := userID.(string) + "/" + key
+	fullKey := userID.(string) + "/" + sanitizePath(key)
 
 	if err := h.storage.Delete(c.Request.Context(), fullKey); err != nil {
 		if errors.IsNotFound(err) {
@@ -143,7 +145,7 @@ func (h *StorageHandler) DeleteFile(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "File deleted successfully"})
 }
 
-// GetPresignedURL generates a presigned download URL
+// GetPresignedURL generates a presigned download URL. Uses query param "key".
 func (h *StorageHandler) GetPresignedURL(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -151,16 +153,15 @@ func (h *StorageHandler) GetPresignedURL(c *gin.Context) {
 		return
 	}
 
-	key := c.Param("key")
+	key := c.Query("key")
 	if key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "File key is required"})
 		return
 	}
 
-	// Construct full key with userId prefix
-	fullKey := userID.(string) + "/" + key
-
+	fullKey := userID.(string) + "/" + sanitizePath(key)
 	expiration := time.Hour
+
 	url, err := h.storage.GetURL(c.Request.Context(), fullKey, expiration)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -171,11 +172,19 @@ func (h *StorageHandler) GetPresignedURL(c *gin.Context) {
 		return
 	}
 
-	expiresAt := time.Now().Add(expiration)
-	resp := PresignedURLResponse{
+	c.JSON(http.StatusOK, PresignedURLResponse{
 		URL:       url,
-		ExpiresAt: expiresAt.Format(time.RFC3339),
-	}
+		ExpiresAt: time.Now().Add(expiration).Format(time.RFC3339),
+	})
+}
 
-	c.JSON(http.StatusOK, resp)
+// sanitizePath removes leading/trailing slashes and rejects path traversal attempts.
+func sanitizePath(path string) string {
+	path = strings.TrimSpace(path)
+	path = strings.Trim(path, "/")
+	// Reject traversal
+	if strings.Contains(path, "..") {
+		return ""
+	}
+	return path
 }
