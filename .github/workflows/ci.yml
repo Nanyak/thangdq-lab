@@ -29,7 +29,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./services/api
           push: true
           tags: |
             ghcr.io/nanyak/url_shortener_api:latest

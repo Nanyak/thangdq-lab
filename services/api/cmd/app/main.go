@@ -11,7 +11,7 @@ import (
 	"time"
 
 	httphandler "github.com/Nanyak/thangdq-lab/internal/controller/http"
-	"github.com/Nanyak/thangdq-lab/internal/infrastructure/auth/cognito"
+	"github.com/Nanyak/thangdq-lab/internal/service/auth/cognito"
 	"github.com/Nanyak/thangdq-lab/internal/repository/mongodb"
 	"github.com/Nanyak/thangdq-lab/internal/repository/redis"
 	s3repo "github.com/Nanyak/thangdq-lab/internal/repository/s3"

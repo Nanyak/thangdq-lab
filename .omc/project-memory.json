@@ -1,0 +1,140 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1777662107463,
+  "projectRoot": "/Users/thangdq/stuffsy/stuffsy-api",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Go",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "go.mod"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "go",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "ai": {
+      "path": "ai",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1777662107459,
+      "keyFiles": [
+        "Dockerfile",
+        "Dockerfile.worker",
+        "pyproject.toml",
+        "worker.py"
+      ]
+    },
+    "cmd": {
+      "path": "cmd",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1777662107459,
+      "keyFiles": []
+    },
+    "internal": {
+      "path": "internal",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1777662107460,
+      "keyFiles": []
+    },
+    "pkg": {
+      "path": "pkg",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1777662107460,
+      "keyFiles": []
+    },
+    "ai/app": {
+      "path": "ai/app",
+      "purpose": "Application code",
+      "fileCount": 2,
+      "lastAccessed": 1777662107460,
+      "keyFiles": [
+        "__init__.py",
+        "main.py"
+      ]
+    },
+    "cmd/app": {
+      "path": "cmd/app",
+      "purpose": "Application code",
+      "fileCount": 1,
+      "lastAccessed": 1777662107460,
+      "keyFiles": [
+        "main.go"
+      ]
+    },
+    "pkg/config": {
+      "path": "pkg/config",
+      "purpose": "Configuration files",
+      "fileCount": 2,
+      "lastAccessed": 1777662107461,
+      "keyFiles": [
+        "config.go",
+        "config_test.go"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "internal/service/ai/client.go",
+      "accessCount": 2,
+      "lastAccessed": 1777662306022,
+      "type": "file"
+    },
+    {
+      "path": "CLAUDE.md",
+      "accessCount": 2,
+      "lastAccessed": 1777662562907,
+      "type": "file"
+    },
+    {
+      "path": "internal/service/auth/cognito/auth_service.go",
+      "accessCount": 1,
+      "lastAccessed": 1777662301534,
+      "type": "file"
+    },
+    {
+      "path": "cmd/app/main.go",
+      "accessCount": 1,
+      "lastAccessed": 1777662307255,
+      "type": "file"
+    },
+    {
+      "path": "Makefile",
+      "accessCount": 1,
+      "lastAccessed": 1777662563764,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
