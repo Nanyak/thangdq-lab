@@ -5,6 +5,8 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
+	"mime"
+	"path/filepath"
 	"time"
 
 	"github.com/Nanyak/thangdq-lab/internal/entity"
@@ -115,9 +117,15 @@ func (s *S3Storage) List(ctx context.Context, prefix string) ([]*entity.File, er
 
 	files := make([]*entity.File, 0, len(result.Contents))
 	for _, obj := range result.Contents {
+		key := aws.ToString(obj.Key)
+		ct := mime.TypeByExtension(filepath.Ext(key))
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
 		file := &entity.File{
-			Key:          aws.ToString(obj.Key),
+			Key:          key,
 			Size:         aws.ToInt64(obj.Size),
+			ContentType:  ct,
 			LastModified: aws.ToTime(obj.LastModified),
 		}
 		files = append(files, file)
