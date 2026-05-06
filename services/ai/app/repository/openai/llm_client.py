@@ -12,7 +12,7 @@ async def stream_chat(messages: list[dict]) -> AsyncGenerator[str, None]:
         messages=messages,
         stream=True,
         temperature=0.1,
-        max_tokens=1024,
+        max_completion_tokens=1024,
     )
     async for chunk in stream:
         delta = chunk.choices[0].delta
