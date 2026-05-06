@@ -8,12 +8,15 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	MongoDB  MongoDBConfig
-	Redis    RedisConfig
-	S3       S3Config
-	Cognito  CognitoConfig
-	CacheTTL time.Duration
+	Server         ServerConfig
+	MongoDB        MongoDBConfig
+	Redis          RedisConfig
+	S3             S3Config
+	Cognito        CognitoConfig
+	CacheTTL            time.Duration
+	AIServiceURL        string
+	EmbedQueueKey       string
+	SQSVideoQueueURL    string
 }
 
 type ServerConfig struct {
@@ -85,7 +88,10 @@ func Load() (*Config, error) {
 			ClientSecret: getEnv("COGNITO_CLIENT_SECRET", ""),
 			Region:       getEnv("COGNITO_REGION", ""),
 		},
-		CacheTTL: getEnvDuration("CACHE_TTL", 6*time.Hour),
+		CacheTTL:         getEnvDuration("CACHE_TTL", 6*time.Hour),
+		AIServiceURL:     getEnv("AI_SERVICE_URL", "http://localhost:8000"),
+		EmbedQueueKey:    getEnv("EMBED_QUEUE_KEY", "stuffsy:embed"),
+		SQSVideoQueueURL: getEnv("SQS_VIDEO_QUEUE_URL", ""),
 	}
 
 	if err := cfg.Validate(); err != nil {

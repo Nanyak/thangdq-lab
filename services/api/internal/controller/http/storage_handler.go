@@ -3,11 +3,13 @@ package http
 import (
 	"context"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/Nanyak/thangdq-lab/internal/entity"
+	"github.com/Nanyak/thangdq-lab/internal/service/embed"
 	"github.com/Nanyak/thangdq-lab/pkg/errors"
 	"github.com/gin-gonic/gin"
 )
@@ -22,12 +24,14 @@ type StorageService interface {
 }
 
 type StorageHandler struct {
-	storage StorageService
+	storage   StorageService
+	embedPub  embed.Publisher
 }
 
-func NewStorageHandler(storage StorageService) *StorageHandler {
+func NewStorageHandler(storage StorageService, embedPub embed.Publisher) *StorageHandler {
 	return &StorageHandler{
-		storage: storage,
+		storage:  storage,
+		embedPub: embedPub,
 	}
 }
 
@@ -72,6 +76,20 @@ func (h *StorageHandler) UploadFile(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload file"})
 		return
 	}
+
+	go func() {
+		job := embed.Job{
+			FileID:   objectKey,
+			FileName: file.Filename,
+			S3Key:    objectKey,
+			UserID:   userID.(string),
+			Folder:   folderPath,
+			MimeType: contentType,
+		}
+		if err := h.embedPub.Publish(context.Background(), job); err != nil {
+			log.Printf("embed publish failed for %s: %v", objectKey, err)
+		}
+	}()
 
 	url, err := h.storage.GetURL(c.Request.Context(), objectKey, time.Hour)
 	if err != nil {

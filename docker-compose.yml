@@ -8,8 +8,54 @@ services:
         condition: service_healthy
       mongodb:
         condition: service_healthy
+      ai:
+        condition: service_started
     env_file:
       - .env
+    environment:
+      - AI_SERVICE_URL=http://ai:8000
+
+  ai:
+    image: ghcr.io/nanyak/stuffsy_ai:latest
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+
+  worker:
+    image: ghcr.io/nanyak/stuffsy_worker:latest
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    expose:
+      - "6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -31,3 +77,4 @@ services:
 
 volumes:
   mongodb_data:
+  qdrant_data:

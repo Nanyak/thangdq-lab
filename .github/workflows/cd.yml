@@ -20,5 +20,9 @@ jobs:
           script: |
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
             docker pull ghcr.io/nanyak/url_shortener_api:${{ github.event.workflow_run.head_sha }}
+            docker pull ghcr.io/nanyak/stuffsy_ai:${{ github.event.workflow_run.head_sha }}
+            docker pull ghcr.io/nanyak/stuffsy_worker:${{ github.event.workflow_run.head_sha }}
             docker tag ghcr.io/nanyak/url_shortener_api:${{ github.event.workflow_run.head_sha }} ghcr.io/nanyak/url_shortener_api:latest
+            docker tag ghcr.io/nanyak/stuffsy_ai:${{ github.event.workflow_run.head_sha }} ghcr.io/nanyak/stuffsy_ai:latest
+            docker tag ghcr.io/nanyak/stuffsy_worker:${{ github.event.workflow_run.head_sha }} ghcr.io/nanyak/stuffsy_worker:latest
             docker compose -f /home/thangdq/api/docker-compose.yml up -d

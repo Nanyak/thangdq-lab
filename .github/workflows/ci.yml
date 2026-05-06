@@ -26,7 +26,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.CR_PAT }}
 
-      - name: Build and push Docker image
+      - name: Build and push API image
         uses: docker/build-push-action@v5
         with:
           context: ./services/api
@@ -34,5 +34,29 @@ jobs:
           tags: |
             ghcr.io/nanyak/url_shortener_api:latest
             ghcr.io/nanyak/url_shortener_api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push AI service image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/ai
+          file: ./services/ai/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/nanyak/stuffsy_ai:latest
+            ghcr.io/nanyak/stuffsy_ai:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/ai
+          file: ./services/ai/Dockerfile.worker
+          push: true
+          tags: |
+            ghcr.io/nanyak/stuffsy_worker:latest
+            ghcr.io/nanyak/stuffsy_worker:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -11,10 +11,12 @@ import (
 	"time"
 
 	httphandler "github.com/Nanyak/thangdq-lab/internal/controller/http"
-	"github.com/Nanyak/thangdq-lab/internal/service/auth/cognito"
 	"github.com/Nanyak/thangdq-lab/internal/repository/mongodb"
 	"github.com/Nanyak/thangdq-lab/internal/repository/redis"
 	s3repo "github.com/Nanyak/thangdq-lab/internal/repository/s3"
+	aiservice "github.com/Nanyak/thangdq-lab/internal/service/ai"
+	"github.com/Nanyak/thangdq-lab/internal/service/auth/cognito"
+	"github.com/Nanyak/thangdq-lab/internal/service/embed"
 	"github.com/Nanyak/thangdq-lab/internal/usecase"
 	"github.com/Nanyak/thangdq-lab/internal/usecase/shortcode"
 	"github.com/Nanyak/thangdq-lab/pkg/config"
@@ -87,6 +89,14 @@ func main() {
 	}
 	storageUsecase := usecase.NewStorage(s3Storage)
 
+	// Embed publishers: Redis for light files, SQS for video
+	redisEmbed := embed.NewRedisPublisher(redisClient, cfg.EmbedQueueKey)
+	sqsEmbed, err := embed.NewSQSPublisher(ctx, cfg.S3.Region, cfg.SQSVideoQueueURL)
+	if err != nil {
+		log.Fatalf("Failed to initialize SQS embed publisher: %v", err)
+	}
+	embedRouter := embed.NewRouter(redisEmbed, sqsEmbed)
+
 	// Cognito auth initialization
 	cognitoService, err := cognito.NewCognitoService(&cfg.Cognito)
 	if err != nil {
@@ -100,8 +110,9 @@ func main() {
 
 	// Initialize HTTP handlers
 	handler := httphandler.NewHandler(urlShortener, cfg.Server.BaseURL)
-	storageHandler := httphandler.NewStorageHandler(storageUsecase)
+	storageHandler := httphandler.NewStorageHandler(storageUsecase, embedRouter)
 	authHandler := httphandler.NewAuthHandler(authUsecase)
+	aiHandler := httphandler.NewAIHandler(aiservice.NewClient(cfg.AIServiceURL))
 
 	// Setup router
 	router := gin.Default()
@@ -143,6 +154,13 @@ func main() {
 		files.GET("", storageHandler.ListFiles)
 		files.DELETE("", storageHandler.DeleteFile)
 		files.GET("/url", storageHandler.GetPresignedURL)
+	}
+
+	// AI routes (protected)
+	aiRoutes := api.Group("/ai")
+	aiRoutes.Use(httphandler.AuthMiddleware(authUsecase))
+	{
+		aiRoutes.GET("/query", aiHandler.Query)
 	}
 
 	// Auth routes
