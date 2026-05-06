@@ -1,7 +1,7 @@
 import uuid
 
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
+from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PayloadSchemaType, PointStruct, VectorParams
 
 from app.core.config import settings
 
@@ -21,6 +21,14 @@ async def ensure_collection() -> None:
         await _client.create_collection(
             collection_name=settings.qdrant_collection,
             vectors_config=VectorParams(size=_VECTOR_SIZE, distance=Distance.COSINE),
+        )
+
+    # Ensure payload indexes required for filtering
+    for field in ("file_id", "user_id", "folder"):
+        await _client.create_payload_index(
+            collection_name=settings.qdrant_collection,
+            field_name=field,
+            field_schema=PayloadSchemaType.KEYWORD,
         )
 
 
