@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     openai_api_key: str
     qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str = ""
     qdrant_collection: str = "stuffsy_files"
     embedding_model: str = "text-embedding-3-small"
     chat_model: str = "gpt-4o-mini"

@@ -5,7 +5,10 @@ from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, P
 
 from app.core.config import settings
 
-_client = AsyncQdrantClient(url=settings.qdrant_url)
+_client = AsyncQdrantClient(
+    url=settings.qdrant_url,
+    api_key=settings.qdrant_api_key or None,
+)
 
 # text-embedding-3-small output dimension
 _VECTOR_SIZE = 1536
