@@ -1,9 +1,12 @@
+import logging
 import uuid
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PayloadSchemaType, PointStruct, VectorParams
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _client = AsyncQdrantClient(
     url=settings.qdrant_url,
@@ -49,9 +52,9 @@ async def search(
             query_filter=Filter(must=must),
             limit=top_k,
             with_payload=True,
-            score_threshold=settings.similarity_threshold,
         )
     except Exception:
+        logger.exception("qdrant search failed user_id=%s scope=%s", user_id, scope)
         return []
 
     return [
