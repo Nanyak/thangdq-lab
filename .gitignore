@@ -1,5 +1,8 @@
-# Claude
+# Claude / OMC
 .claude/
+.omc/sessions/
+.omc/state/
+**/.omc/state/
 
 # Binaries
 *.exe
@@ -42,6 +45,17 @@ logs/
 # Temp
 tmp/
 temp/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Terraform
 **/.terraform/
