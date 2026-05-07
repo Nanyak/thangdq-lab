@@ -46,13 +46,14 @@ async def search(
         must.append(FieldCondition(key="folder", match=MatchValue(value=scope)))
 
     try:
-        results = await _client.search(
+        response = await _client.query_points(
             collection_name=settings.qdrant_collection,
-            query_vector=vector,
+            query=vector,
             query_filter=Filter(must=must),
             limit=top_k,
             with_payload=True,
         )
+        results = response.points
     except Exception:
         logger.exception("qdrant search failed user_id=%s scope=%s", user_id, scope)
         return []
