@@ -52,6 +52,7 @@ async def search(
             query_filter=Filter(must=must),
             limit=top_k,
             with_payload=True,
+            score_threshold=settings.similarity_threshold,
         )
         results = response.points
     except Exception:
