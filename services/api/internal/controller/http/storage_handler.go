@@ -79,6 +79,7 @@ func (h *StorageHandler) UploadFile(c *gin.Context) {
 
 	go func() {
 		job := embed.Job{
+			Type:     "embed",
 			FileID:   objectKey,
 			FileName: file.Filename,
 			S3Key:    objectKey,
@@ -159,6 +160,17 @@ func (h *StorageHandler) DeleteFile(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete file"})
 		return
 	}
+
+	go func() {
+		job := embed.Job{
+			Type:   "delete",
+			FileID: fullKey,
+			UserID: userID.(string),
+		}
+		if err := h.embedPub.Publish(context.Background(), job); err != nil {
+			log.Printf("embed delete publish failed for %s: %v", fullKey, err)
+		}
+	}()
 
 	c.JSON(http.StatusOK, gin.H{"message": "File deleted successfully"})
 }

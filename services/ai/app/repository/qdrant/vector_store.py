@@ -1,8 +1,21 @@
 import logging
 import uuid
 
+from fastembed import SparseTextEmbedding
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PayloadSchemaType, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    Fusion,
+    MatchValue,
+    PayloadSchemaType,
+    PointStruct,
+    Prefetch,
+    SparseVector,
+    SparseVectorParams,
+    VectorParams,
+)
 
 from app.core.config import settings
 
@@ -13,12 +26,23 @@ _client = AsyncQdrantClient(
     api_key=settings.qdrant_api_key or None,
 )
 
-_VECTOR_SIZE = 1536
+_DENSE_SIZE = 1536
+_SPARSE_MODEL = "Qdrant/bm25"
+_sparse_encoder = SparseTextEmbedding(model_name=_SPARSE_MODEL)
+
 _initialized: set[str] = set()
 
 
 def _collection(user_id: str) -> str:
     return user_id
+
+
+def _encode_sparse(texts: list[str]) -> list[SparseVector]:
+    embeddings = list(_sparse_encoder.embed(texts))
+    return [
+        SparseVector(indices=e.indices.tolist(), values=e.values.tolist())
+        for e in embeddings
+    ]
 
 
 async def ensure_collection(user_id: str) -> None:
@@ -28,10 +52,26 @@ async def ensure_collection(user_id: str) -> None:
 
     existing = await _client.get_collections()
     names = {c.name for c in existing.collections}
+
+    if col in names:
+        info = await _client.get_collection(col)
+        has_sparse = bool(info.config.params.sparse_vectors_config)
+        if not has_sparse:
+            # Existing dense-only collection: recreate with hybrid config.
+            # All documents must be re-uploaded to re-index.
+            logger.warning(
+                "collection %s missing sparse vectors — recreating for hybrid search. "
+                "All files must be re-uploaded.",
+                col,
+            )
+            await _client.delete_collection(col)
+            names.discard(col)
+
     if col not in names:
         await _client.create_collection(
             collection_name=col,
-            vectors_config=VectorParams(size=_VECTOR_SIZE, distance=Distance.COSINE),
+            vectors_config={"dense": VectorParams(size=_DENSE_SIZE, distance=Distance.COSINE)},
+            sparse_vectors_config={"sparse": SparseVectorParams()},
         )
 
     for field in ("file_id", "folder"):
@@ -46,27 +86,39 @@ async def ensure_collection(user_id: str) -> None:
 
 async def search(
     vector: list[float],
+    query_text: str,
     user_id: str,
     scope: str,
     top_k: int,
 ) -> list[dict]:
     col = _collection(user_id)
-    must: list = []
+
+    query_filter: Filter | None = None
     if scope not in ("all", ""):
-        must.append(FieldCondition(key="folder", match=MatchValue(value=scope)))
+        query_filter = Filter(
+            must=[FieldCondition(key="folder", match=MatchValue(value=scope))]
+        )
+
+    sparse_vec = _encode_sparse([query_text])[0]
+
+    prefetch_limit = top_k * 2
+    prefetches = [
+        Prefetch(query=vector, using="dense", limit=prefetch_limit, filter=query_filter),
+        Prefetch(query=sparse_vec, using="sparse", limit=prefetch_limit, filter=query_filter),
+    ]
 
     try:
         response = await _client.query_points(
             collection_name=col,
-            query=vector,
-            query_filter=Filter(must=must) if must else None,
+            prefetch=prefetches,
+            query=Fusion.RRF,
+            query_filter=query_filter,
             limit=top_k,
             with_payload=True,
-            score_threshold=settings.similarity_threshold,
         )
         results = response.points
     except Exception:
-        logger.exception("qdrant search failed user_id=%s scope=%s", user_id, scope)
+        logger.exception("qdrant hybrid search failed user_id=%s scope=%s", user_id, scope)
         return []
 
     return [
@@ -80,6 +132,20 @@ async def search(
         }
         for r in results
     ]
+
+
+async def delete_file(file_id: str, user_id: str) -> None:
+    col = _collection(user_id)
+    try:
+        await _client.delete(
+            collection_name=col,
+            points_selector=Filter(
+                must=[FieldCondition(key="file_id", match=MatchValue(value=file_id))]
+            ),
+        )
+        logger.info("deleted vectors file_id=%s user_id=%s", file_id, user_id)
+    except Exception:
+        logger.exception("qdrant delete_file failed file_id=%s user_id=%s", file_id, user_id)
 
 
 async def upsert(
@@ -99,10 +165,13 @@ async def upsert(
         ),
     )
 
+    texts = [chunk["text"] for chunk in chunks]
+    sparse_vecs = _encode_sparse(texts)
+
     points = [
         PointStruct(
             id=str(uuid.uuid4()),
-            vector=chunk["vector"],
+            vector={"dense": chunk["vector"], "sparse": sparse_vecs[i]},
             payload={
                 "file_id": file_id,
                 "file_name": file_name,
@@ -112,7 +181,7 @@ async def upsert(
                 "chunk_index": chunk["chunk_index"],
             },
         )
-        for chunk in chunks
+        for i, chunk in enumerate(chunks)
     ]
 
     if points:

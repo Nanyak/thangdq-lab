@@ -39,6 +39,7 @@ async def query(
     vector = await embedder.embed(question)
     chunks = await vector_store.search(
         vector=vector,
+        query_text=question,
         user_id=user_id,
         scope=scope,
         top_k=settings.top_k,

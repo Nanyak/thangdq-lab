@@ -20,6 +20,21 @@ async def run() -> None:
 
 
 async def _process(job: dict) -> None:
+    job_type = job.get("type", "embed")
+    if job_type == "delete":
+        await _handle_delete(job)
+    else:
+        await _handle_embed(job)
+
+
+async def _handle_delete(job: dict) -> None:
+    file_id: str = job["file_id"]
+    user_id: str = job["user_id"]
+    logger.info("deleting vectors file_id=%s user_id=%s", file_id, user_id)
+    await vector_store.delete_file(file_id=file_id, user_id=user_id)
+
+
+async def _handle_embed(job: dict) -> None:
     file_id: str = job["file_id"]
     file_name: str = job["file_name"]
     s3_key: str = job["s3_key"]
