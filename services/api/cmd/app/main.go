@@ -112,7 +112,7 @@ func main() {
 	handler := httphandler.NewHandler(urlShortener, cfg.Server.BaseURL)
 	storageHandler := httphandler.NewStorageHandler(storageUsecase, embedRouter)
 	authHandler := httphandler.NewAuthHandler(authUsecase)
-	aiHandler := httphandler.NewAIHandler(aiservice.NewClient(cfg.AIServiceURL))
+	aiHandler := httphandler.NewAIHandler(aiservice.NewClient(cfg.AIServiceURL, cfg.AIInternalKey))
 
 	// Setup router
 	router := gin.Default()

@@ -9,16 +9,16 @@ import (
 )
 
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL     string
+	internalKey string
+	httpClient  *http.Client
 }
 
-func NewClient(baseURL string) *Client {
+func NewClient(baseURL, internalKey string) *Client {
 	return &Client{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 120 * time.Second,
-		},
+		baseURL:     baseURL,
+		internalKey: internalKey,
+		httpClient:  &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
@@ -35,6 +35,9 @@ func (c *Client) Query(question, scope, userID string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "text/event-stream")
+	if c.internalKey != "" {
+		req.Header.Set("X-Internal-Key", c.internalKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

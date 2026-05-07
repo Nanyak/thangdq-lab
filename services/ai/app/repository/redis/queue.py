@@ -21,3 +21,11 @@ async def consume() -> AsyncGenerator[dict, None]:
 async def push(job: dict) -> None:
     client = aioredis.Redis(connection_pool=_pool)
     await client.rpush(settings.embedding_queue_key, json.dumps(job))
+
+
+async def push_dead_letter(job: dict, error: str) -> None:
+    client = aioredis.Redis(connection_pool=_pool)
+    await client.rpush(
+        settings.embedding_dead_letter_key,
+        json.dumps({"job": job, "error": error}),
+    )

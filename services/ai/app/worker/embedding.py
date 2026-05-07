@@ -1,4 +1,3 @@
-import asyncio
 import logging
 
 from app.repository.openai import embedder
@@ -15,8 +14,9 @@ async def run() -> None:
     async for job in queue.consume():
         try:
             await _process(job)
-        except Exception:
+        except Exception as exc:
             logger.exception("failed to process job %s", job)
+            await queue.push_dead_letter(job, str(exc))
 
 
 async def _process(job: dict) -> None:
@@ -36,7 +36,9 @@ async def _process(job: dict) -> None:
         logger.warning("no chunks extracted for file_id=%s", file_id)
         return
 
-    vectors = await asyncio.gather(*[embedder.embed(c.text) for c in chunks])
+    # Prefix each chunk with file context so short chunks embed with richer semantics
+    embed_texts = [f"[{file_name}] {c.text}" for c in chunks]
+    vectors = await embedder.embed_batch(embed_texts)
 
     embedded = [
         {"text": c.text, "page": c.page, "chunk_index": c.chunk_index, "vector": v}

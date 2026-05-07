@@ -1,7 +1,6 @@
 import asyncio
 import base64
 import io
-import subprocess
 import tempfile
 from dataclasses import dataclass
 
@@ -25,16 +24,32 @@ class Chunk:
 
 
 def _split(text: str) -> list[str]:
-    pieces, start = [], 0
     text = text.strip()
+    if not text:
+        return []
+
+    size = settings.chunk_size
+    overlap = settings.chunk_overlap
+    pieces = []
+    start = 0
+
     while start < len(text):
-        end = min(start + settings.chunk_size, len(text))
+        end = min(start + size, len(text))
+        # Snap end to last word boundary to avoid cutting mid-word
+        if end < len(text):
+            boundary = text.rfind(' ', start, end)
+            if boundary > start:
+                end = boundary
         piece = text[start:end].strip()
         if piece:
             pieces.append(piece)
-        if end == len(text):
+        if end >= len(text):
             break
-        start += settings.chunk_size - settings.chunk_overlap
+        # Start next chunk overlapping by chunk_overlap, snapped to word start
+        start = end - overlap
+        while start < len(text) and text[start] == ' ':
+            start += 1
+
     return pieces
 
 
@@ -92,11 +107,13 @@ async def _extract_video(data: bytes) -> list[Chunk]:
             f.write(data)
 
         # Transcribe audio via Whisper
-        result = subprocess.run(
-            ["ffmpeg", "-i", video_path, "-vn", "-ar", "16000", "-ac", "1", "-q:a", "0", audio_path],
-            capture_output=True,
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-i", video_path, "-vn", "-ar", "16000", "-ac", "1", "-q:a", "0", audio_path,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
         )
-        if result.returncode == 0:
+        returncode = await proc.wait()
+        if returncode == 0:
             with open(audio_path, "rb") as f:
                 transcript = await _client.audio.transcriptions.create(
                     model=settings.whisper_model,

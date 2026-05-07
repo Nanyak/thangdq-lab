@@ -15,6 +15,7 @@ type Config struct {
 	Cognito        CognitoConfig
 	CacheTTL            time.Duration
 	AIServiceURL        string
+	AIInternalKey       string
 	EmbedQueueKey       string
 	SQSVideoQueueURL    string
 }
@@ -90,6 +91,7 @@ func Load() (*Config, error) {
 		},
 		CacheTTL:         getEnvDuration("CACHE_TTL", 6*time.Hour),
 		AIServiceURL:     getEnv("AI_SERVICE_URL", "http://localhost:8000"),
+		AIInternalKey:    getEnv("AI_INTERNAL_KEY", ""),
 		EmbedQueueKey:    getEnv("EMBED_QUEUE_KEY", "stuffsy:embed"),
 		SQSVideoQueueURL: getEnv("SQS_VIDEO_QUEUE_URL", ""),
 	}

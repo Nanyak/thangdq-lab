@@ -7,7 +7,6 @@ class Settings(BaseSettings):
     openai_api_key: str
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str = ""
-    qdrant_collection: str = "stuffsy_files"
     embedding_model: str = "text-embedding-3-small"
     chat_model: str = "gpt-4o-mini"
     vision_model: str = "gpt-4o"
@@ -22,6 +21,8 @@ class Settings(BaseSettings):
     s3_bucket: str = ""
     redis_url: str = "redis://localhost:6379"
     embedding_queue_key: str = "stuffsy:embed"
+    embedding_dead_letter_key: str = "stuffsy:embed:failed"
+    internal_api_key: str = ""
 
 
 settings = Settings()
