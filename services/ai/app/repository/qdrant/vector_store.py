@@ -13,26 +13,35 @@ _client = AsyncQdrantClient(
     api_key=settings.qdrant_api_key or None,
 )
 
-# text-embedding-3-small output dimension
 _VECTOR_SIZE = 1536
+_initialized: set[str] = set()
 
 
-async def ensure_collection() -> None:
+def _collection(user_id: str) -> str:
+    return user_id
+
+
+async def ensure_collection(user_id: str) -> None:
+    col = _collection(user_id)
+    if col in _initialized:
+        return
+
     existing = await _client.get_collections()
     names = {c.name for c in existing.collections}
-    if settings.qdrant_collection not in names:
+    if col not in names:
         await _client.create_collection(
-            collection_name=settings.qdrant_collection,
+            collection_name=col,
             vectors_config=VectorParams(size=_VECTOR_SIZE, distance=Distance.COSINE),
         )
 
-    # Ensure payload indexes required for filtering
-    for field in ("file_id", "user_id", "folder"):
+    for field in ("file_id", "folder"):
         await _client.create_payload_index(
-            collection_name=settings.qdrant_collection,
+            collection_name=col,
             field_name=field,
             field_schema=PayloadSchemaType.KEYWORD,
         )
+
+    _initialized.add(col)
 
 
 async def search(
@@ -41,15 +50,16 @@ async def search(
     scope: str,
     top_k: int,
 ) -> list[dict]:
-    must: list = [FieldCondition(key="user_id", match=MatchValue(value=user_id))]
+    col = _collection(user_id)
+    must: list = []
     if scope not in ("all", ""):
         must.append(FieldCondition(key="folder", match=MatchValue(value=scope)))
 
     try:
         response = await _client.query_points(
-            collection_name=settings.qdrant_collection,
+            collection_name=col,
             query=vector,
-            query_filter=Filter(must=must),
+            query_filter=Filter(must=must) if must else None,
             limit=top_k,
             with_payload=True,
             score_threshold=settings.similarity_threshold,
@@ -79,9 +89,11 @@ async def upsert(
     folder: str,
     chunks: list[dict],
 ) -> None:
-    # Remove existing points for this file before re-indexing
+    col = _collection(user_id)
+    await ensure_collection(user_id)
+
     await _client.delete(
-        collection_name=settings.qdrant_collection,
+        collection_name=col,
         points_selector=Filter(
             must=[FieldCondition(key="file_id", match=MatchValue(value=file_id))]
         ),
@@ -94,7 +106,6 @@ async def upsert(
             payload={
                 "file_id": file_id,
                 "file_name": file_name,
-                "user_id": user_id,
                 "folder": folder,
                 "text": chunk["text"],
                 "page": chunk.get("page"),
@@ -105,4 +116,4 @@ async def upsert(
     ]
 
     if points:
-        await _client.upsert(collection_name=settings.qdrant_collection, points=points)
+        await _client.upsert(collection_name=col, points=points)

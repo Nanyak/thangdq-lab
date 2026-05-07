@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 async def run() -> None:
-    await vector_store.ensure_collection()
     logger.info("embedding worker started")
     async for job in queue.consume():
         try:
