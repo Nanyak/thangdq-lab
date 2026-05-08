@@ -8,6 +8,7 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     Fusion,
+    FusionQuery,
     MatchValue,
     PayloadSchemaType,
     PointStruct,
@@ -111,7 +112,7 @@ async def search(
         response = await _client.query_points(
             collection_name=col,
             prefetch=prefetches,
-            query=Fusion.RRF,
+            query=FusionQuery(fusion=Fusion.RRF),
             query_filter=query_filter,
             limit=top_k,
             with_payload=True,
