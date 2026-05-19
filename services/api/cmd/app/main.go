@@ -161,6 +161,7 @@ func main() {
 	aiRoutes.Use(httphandler.AuthMiddleware(authUsecase))
 	{
 		aiRoutes.GET("/query", aiHandler.Query)
+		aiRoutes.POST("/chat", aiHandler.Chat)
 	}
 
 	// Auth routes

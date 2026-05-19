@@ -7,6 +7,7 @@ Backend API for Stuffsy - a collection of useful online tools.
 - **URL Shortener** - Shorten long URLs with custom short codes
 - **Cloud Storage** - Upload, download, and manage files via S3 (user-scoped)
 - **Authentication** - AWS Cognito authentication with JWT tokens
+- **AI Assistant** - RAG chatbot over uploaded files, with tools to list and organize files
 
 ## Tech Stack
 
@@ -102,6 +103,25 @@ Requires `Authorization: Bearer <access_token>` header. Files are scoped to the 
 | `GET` | `/v1/api/files` | List user's files |
 | `DELETE` | `/v1/api/files/:key` | Delete file |
 | `GET` | `/v1/api/files/:key/url` | Get presigned download URL |
+
+### AI Assistant (Protected)
+
+Streams Server-Sent Events. Events may include `tool`, `source`, `token`, and `done` payloads.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/v1/api/ai/query?q=...&scope=all` | Legacy RAG query stream |
+| `POST` | `/v1/api/ai/chat` | LangChain-managed agent with RAG, file listing, memory, and file organization tools |
+
+Example chat body:
+
+```json
+{
+  "message": "List my files and organize receipts into a receipts folder",
+  "scope": "all",
+  "history": []
+}
+```
 
 ## Project Structure
 

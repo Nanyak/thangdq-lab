@@ -149,6 +149,41 @@ async def delete_file(file_id: str, user_id: str) -> None:
         logger.exception("qdrant delete_file failed file_id=%s user_id=%s", file_id, user_id)
 
 
+async def move_file(
+    old_file_id: str,
+    new_file_id: str,
+    new_file_name: str,
+    new_folder: str,
+    user_id: str,
+) -> None:
+    col = _collection(user_id)
+    try:
+        await _client.set_payload(
+            collection_name=col,
+            payload={
+                "file_id": new_file_id,
+                "file_name": new_file_name,
+                "folder": new_folder,
+            },
+            points=Filter(
+                must=[FieldCondition(key="file_id", match=MatchValue(value=old_file_id))]
+            ),
+        )
+        logger.info(
+            "moved vector payload old_file_id=%s new_file_id=%s user_id=%s",
+            old_file_id,
+            new_file_id,
+            user_id,
+        )
+    except Exception:
+        logger.exception(
+            "qdrant move_file failed old_file_id=%s new_file_id=%s user_id=%s",
+            old_file_id,
+            new_file_id,
+            user_id,
+        )
+
+
 async def upsert(
     file_id: str,
     file_name: str,

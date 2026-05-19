@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     aws_secret_access_key: str = ""
     aws_region: str = "us-east-1"
     s3_bucket: str = ""
+    s3_endpoint: str = ""
     redis_url: str = "redis://localhost:6379"
     embedding_queue_key: str = "stuffsy:embed"
     embedding_dead_letter_key: str = "stuffsy:embed:failed"

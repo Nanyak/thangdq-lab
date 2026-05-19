@@ -24,14 +24,18 @@ type StorageService interface {
 }
 
 type StorageHandler struct {
-	storage   StorageService
-	embedPub  embed.Publisher
+	storage  StorageService
+	embedPub embed.Publisher
 }
 
-func NewStorageHandler(storage StorageService, embedPub embed.Publisher) *StorageHandler {
+func NewStorageHandler(storage StorageService, embedPub ...embed.Publisher) *StorageHandler {
+	var publisher embed.Publisher
+	if len(embedPub) > 0 {
+		publisher = embedPub[0]
+	}
 	return &StorageHandler{
 		storage:  storage,
-		embedPub: embedPub,
+		embedPub: publisher,
 	}
 }
 
@@ -77,20 +81,22 @@ func (h *StorageHandler) UploadFile(c *gin.Context) {
 		return
 	}
 
-	go func() {
-		job := embed.Job{
-			Type:     "embed",
-			FileID:   objectKey,
-			FileName: file.Filename,
-			S3Key:    objectKey,
-			UserID:   userID.(string),
-			Folder:   folderPath,
-			MimeType: contentType,
-		}
-		if err := h.embedPub.Publish(context.Background(), job); err != nil {
-			log.Printf("embed publish failed for %s: %v", objectKey, err)
-		}
-	}()
+	if h.embedPub != nil {
+		go func() {
+			job := embed.Job{
+				Type:     "embed",
+				FileID:   objectKey,
+				FileName: file.Filename,
+				S3Key:    objectKey,
+				UserID:   userID.(string),
+				Folder:   folderPath,
+				MimeType: contentType,
+			}
+			if err := h.embedPub.Publish(context.Background(), job); err != nil {
+				log.Printf("embed publish failed for %s: %v", objectKey, err)
+			}
+		}()
+	}
 
 	url, err := h.storage.GetURL(c.Request.Context(), objectKey, time.Hour)
 	if err != nil {
@@ -161,16 +167,18 @@ func (h *StorageHandler) DeleteFile(c *gin.Context) {
 		return
 	}
 
-	go func() {
-		job := embed.Job{
-			Type:   "delete",
-			FileID: fullKey,
-			UserID: userID.(string),
-		}
-		if err := h.embedPub.Publish(context.Background(), job); err != nil {
-			log.Printf("embed delete publish failed for %s: %v", fullKey, err)
-		}
-	}()
+	if h.embedPub != nil {
+		go func() {
+			job := embed.Job{
+				Type:   "delete",
+				FileID: fullKey,
+				UserID: userID.(string),
+			}
+			if err := h.embedPub.Publish(context.Background(), job); err != nil {
+				log.Printf("embed delete publish failed for %s: %v", fullKey, err)
+			}
+		}()
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "File deleted successfully"})
 }

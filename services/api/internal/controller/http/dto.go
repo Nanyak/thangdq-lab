@@ -44,6 +44,19 @@ type PresignedURLResponse struct {
 	ExpiresAt string `json:"expires_at"`
 }
 
+// AI DTOs
+
+type AIChatMessage struct {
+	Role    string `json:"role" binding:"required"`
+	Content string `json:"content" binding:"required"`
+}
+
+type AIChatRequest struct {
+	Message string          `json:"message" binding:"required"`
+	Scope   string          `json:"scope"`
+	History []AIChatMessage `json:"history"`
+}
+
 // Auth DTOs
 
 type SignUpRequest struct {
