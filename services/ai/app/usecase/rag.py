@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
+import re
 from uuid import uuid4
 
 from langchain.agents import create_agent
@@ -87,6 +88,24 @@ class AgentRunState:
     sources: list[dict] = field(default_factory=list)
 
 
+_CONFIRMATION_MESSAGES = {
+    "confirm",
+    "yes",
+    "yes apply",
+    "yes, apply",
+    "apply",
+    "apply changes",
+    "confirm apply",
+    "confirm changes",
+    "confirm apply changes",
+    "proceed",
+    "do it",
+}
+
+_CANCEL_MESSAGES = {"cancel", "stop", "never mind", "nevermind"}
+_MOVE_LINE_RE = re.compile(r"^\s*(?:[-*]\s*)?(?P<key>.+?)\s*(?:->|\u2192)\s*(?P<folder>.+?)\s*$")
+
+
 def _history_messages(history: list[dict] | None) -> list[BaseMessage]:
     messages: list[BaseMessage] = []
     total_chars = 0
@@ -104,6 +123,123 @@ def _history_messages(history: list[dict] | None) -> list[BaseMessage]:
         elif role == "assistant":
             messages.append(AIMessage(content=content))
     return list(reversed(messages))
+
+
+def _normalized_command(message: str) -> str:
+    return " ".join(message.strip().lower().split())
+
+
+def _is_confirmation(message: str) -> bool:
+    return _normalized_command(message) in _CONFIRMATION_MESSAGES
+
+
+def _is_cancel(message: str) -> bool:
+    return _normalized_command(message) in _CANCEL_MESSAGES
+
+
+def _strip_markup(value: str) -> str:
+    value = value.strip()
+    value = value.strip("`")
+    value = re.sub(r"^\d+[.)]\s*", "", value)
+    return value.strip()
+
+
+def _extract_pending_moves(history: list[dict] | None) -> list[dict]:
+    for item in reversed(history or []):
+        if item.get("role") != "assistant":
+            continue
+        content = item.get("content", "")
+        if not isinstance(content, str):
+            continue
+
+        moves: list[dict] = []
+        for line in content.splitlines():
+            match = _MOVE_LINE_RE.match(line)
+            if not match:
+                continue
+            key = _strip_markup(match.group("key"))
+            folder = _strip_markup(match.group("folder"))
+            folder = folder.split(" (", 1)[0].strip()
+            folder = folder.rstrip("/")
+            if key and folder:
+                moves.append({"key": key, "destination_folder": folder})
+        if moves:
+            return moves
+    return []
+
+
+async def _apply_confirmed_plan(
+    message: str,
+    user_id: str,
+    history: list[dict] | None,
+) -> AsyncGenerator[dict, None]:
+    if _is_cancel(message):
+        yield {"token": "Cancelled. No files were moved."}
+        yield {"done": True}
+        return
+
+    if not _is_confirmation(message):
+        return
+
+    moves = _extract_pending_moves(history)
+    if not moves:
+        yield {
+            "token": (
+                "I do not see a pending organization plan to apply. "
+                "Ask me to organize the files again and I will propose a new plan."
+            )
+        }
+        yield {"done": True}
+        return
+
+    yield {
+        "tool": {
+            "name": "organize_files",
+            "status": "started",
+            "input": {"moves": moves},
+        }
+    }
+    try:
+        result = await file_tools.organize_files(user_id=user_id, moves=moves)
+    except Exception as exc:
+        yield {
+            "tool": {
+                "name": "organize_files",
+                "status": "failed",
+                "error": str(exc),
+            }
+        }
+        yield {"token": f"I could not apply the organization changes: {exc}"}
+        yield {"done": True}
+        return
+
+    yield {
+        "tool": {
+            "name": "organize_files",
+            "status": "completed",
+            "result": result.content,
+        }
+    }
+    completed = result.content.get("moves", [])
+    moved = [
+        f"{item['key']} -> {item['destination_key']}"
+        for item in completed
+        if item.get("status") == "moved"
+    ]
+    unchanged = [
+        item["key"]
+        for item in completed
+        if item.get("status") == "unchanged"
+    ]
+    lines = ["Applied the file organization changes."]
+    if moved:
+        lines.append("Moved:")
+        lines.extend(f"- {item}" for item in moved)
+    if unchanged:
+        lines.append("Already in place:")
+        lines.extend(f"- {item}" for item in unchanged)
+    yield {"token": "\n".join(lines)}
+    yield {"done": True}
 
 
 def _build_langchain_tools(
@@ -238,6 +374,18 @@ async def chat(
     allow_mutations: bool = False,
     history: list[dict] | None = None,
 ) -> AsyncGenerator[dict, None]:
+    if not allow_mutations and (_is_confirmation(message) or _is_cancel(message)):
+        handled = False
+        async for event in _apply_confirmed_plan(
+            message=message,
+            user_id=user_id,
+            history=history,
+        ):
+            handled = True
+            yield event
+        if handled:
+            return
+
     agent, state, session_id, memory = _build_agent(
         user_id=user_id,
         scope=scope,
