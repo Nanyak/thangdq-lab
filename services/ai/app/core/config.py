@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,7 +26,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     embedding_queue_key: str = "stuffsy:embed"
     embedding_dead_letter_key: str = "stuffsy:embed:failed"
-    internal_api_key: str = ""
+    internal_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("INTERNAL_API_KEY", "AI_INTERNAL_KEY"),
+    )
 
 
 settings = Settings()

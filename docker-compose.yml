@@ -31,6 +31,7 @@ services:
           memory: 200M
     environment:
       - REDIS_URL=redis://redis:6379
+      - INTERNAL_API_KEY=${AI_INTERNAL_KEY}
 
   worker:
     image: ghcr.io/nanyak/stuffsy_worker:latest
