@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     whisper_model: str = "whisper-1"
     similarity_threshold: float = 0.30
     top_k: int = 6
+    max_chat_history_messages: int = 20
+    max_chat_history_chars: int = 12000
     chunk_size: int = 800
     chunk_overlap: int = 100
     aws_access_key_id: str = ""

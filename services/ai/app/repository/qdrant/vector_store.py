@@ -132,6 +132,7 @@ async def search(
             "text": r.payload.get("text", ""),
         }
         for r in results
+        if r.score is None or r.score >= settings.similarity_threshold
     ]
 
 
@@ -157,31 +158,23 @@ async def move_file(
     user_id: str,
 ) -> None:
     col = _collection(user_id)
-    try:
-        await _client.set_payload(
-            collection_name=col,
-            payload={
-                "file_id": new_file_id,
-                "file_name": new_file_name,
-                "folder": new_folder,
-            },
-            points=Filter(
-                must=[FieldCondition(key="file_id", match=MatchValue(value=old_file_id))]
-            ),
-        )
-        logger.info(
-            "moved vector payload old_file_id=%s new_file_id=%s user_id=%s",
-            old_file_id,
-            new_file_id,
-            user_id,
-        )
-    except Exception:
-        logger.exception(
-            "qdrant move_file failed old_file_id=%s new_file_id=%s user_id=%s",
-            old_file_id,
-            new_file_id,
-            user_id,
-        )
+    await _client.set_payload(
+        collection_name=col,
+        payload={
+            "file_id": new_file_id,
+            "file_name": new_file_name,
+            "folder": new_folder,
+        },
+        points=Filter(
+            must=[FieldCondition(key="file_id", match=MatchValue(value=old_file_id))]
+        ),
+    )
+    logger.info(
+        "moved vector payload old_file_id=%s new_file_id=%s user_id=%s",
+        old_file_id,
+        new_file_id,
+        user_id,
+    )
 
 
 async def upsert(

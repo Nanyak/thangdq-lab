@@ -52,9 +52,10 @@ type AIChatMessage struct {
 }
 
 type AIChatRequest struct {
-	Message string          `json:"message" binding:"required"`
-	Scope   string          `json:"scope"`
-	History []AIChatMessage `json:"history"`
+	Message        string          `json:"message" binding:"required"`
+	Scope          string          `json:"scope"`
+	AllowMutations bool            `json:"allow_mutations"`
+	History        []AIChatMessage `json:"history"`
 }
 
 // Auth DTOs

@@ -9,7 +9,7 @@ import (
 
 type AIClient interface {
 	Query(question, scope, userID string) (io.ReadCloser, error)
-	Chat(message, scope, userID string, history []map[string]string) (io.ReadCloser, error)
+	Chat(message, scope, userID string, allowMutations bool, history []map[string]string) (io.ReadCloser, error)
 }
 
 type AIHandler struct {
@@ -68,7 +68,7 @@ func (h *AIHandler) Chat(c *gin.Context) {
 		})
 	}
 
-	body, err := h.client.Chat(req.Message, req.Scope, userIDStr, history)
+	body, err := h.client.Chat(req.Message, req.Scope, userIDStr, req.AllowMutations, history)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI service unavailable"})
 		return

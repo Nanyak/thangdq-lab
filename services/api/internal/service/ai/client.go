@@ -52,17 +52,19 @@ func (c *Client) Query(question, scope, userID string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-func (c *Client) Chat(message, scope, userID string, history []map[string]string) (io.ReadCloser, error) {
+func (c *Client) Chat(message, scope, userID string, allowMutations bool, history []map[string]string) (io.ReadCloser, error) {
 	payload := struct {
-		Message string              `json:"message"`
-		Scope   string              `json:"scope"`
-		UserID  string              `json:"user_id"`
-		History []map[string]string `json:"history"`
+		Message        string              `json:"message"`
+		Scope          string              `json:"scope"`
+		UserID         string              `json:"user_id"`
+		AllowMutations bool                `json:"allow_mutations"`
+		History        []map[string]string `json:"history"`
 	}{
-		Message: message,
-		Scope:   scope,
-		UserID:  userID,
-		History: history,
+		Message:        message,
+		Scope:          scope,
+		UserID:         userID,
+		AllowMutations: allowMutations,
+		History:        history,
 	}
 
 	var body bytes.Buffer

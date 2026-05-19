@@ -11,25 +11,28 @@ router = APIRouter()
 
 
 class ChatMessage(BaseModel):
-    role: str
-    content: str
+    role: str = Field(..., pattern="^(user|assistant)$")
+    content: str = Field(..., min_length=1, max_length=4000)
 
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     scope: str = "all"
     user_id: str = Field(..., min_length=1)
+    allow_mutations: bool = False
     history: list[ChatMessage] = Field(default_factory=list)
 
 
 def _verify_internal_key(x_internal_key: str = Header("")) -> None:
-    if settings.internal_api_key and x_internal_key != settings.internal_api_key:
+    if not settings.internal_api_key:
+        raise HTTPException(status_code=503, detail="Internal API key is not configured")
+    if x_internal_key != settings.internal_api_key:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 async def _event_stream(question: str, scope: str, user_id: str):
     async for event in rag.query(question=question, scope=scope, user_id=user_id):
-        yield f"data: {json.dumps(event)}\n\n"
+        yield f"data: {json.dumps(event, default=str)}\n\n"
 
 
 async def _chat_event_stream(req: ChatRequest):
@@ -38,9 +41,10 @@ async def _chat_event_stream(req: ChatRequest):
         message=req.message,
         scope=req.scope,
         user_id=req.user_id,
+        allow_mutations=req.allow_mutations,
         history=history,
     ):
-        yield f"data: {json.dumps(event)}\n\n"
+        yield f"data: {json.dumps(event, default=str)}\n\n"
 
 
 @router.get("/query", dependencies=[Depends(_verify_internal_key)])

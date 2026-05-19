@@ -127,26 +127,36 @@ def _object_exists(full_key: str) -> bool:
         raise
 
 
-def _unique_destination(user_id: str, folder: str, name: str) -> str:
+def _unique_destination(user_id: str, folder: str, name: str, reserved: set[str]) -> str:
     base, ext = posixpath.splitext(name)
     for idx in range(0, 1000):
         candidate_name = name if idx == 0 else f"{base} ({idx}){ext}"
         rel = f"{folder}/{candidate_name}" if folder else candidate_name
         full = _user_prefix(user_id) + rel
-        if not _object_exists(full):
+        if rel not in reserved and not _object_exists(full):
+            reserved.add(rel)
             return rel
     raise ValueError("could not allocate a unique destination key")
 
 
 async def organize_files(user_id: str, moves: list[dict]) -> ToolResult:
     planned: list[dict] = []
+    reserved_destinations: set[str] = set()
     for move in moves:
         source_key = _clean_relative_key(str(move.get("key", "")))
         destination_folder = _clean_folder(str(move.get("destination_folder", "")))
         if not source_key:
             raise ValueError("each move requires a file key")
+        source_full = _user_prefix(user_id) + source_key
+        if not _object_exists(source_full):
+            raise ValueError(f"source file does not exist: {source_key}")
         source_name = posixpath.basename(source_key)
-        destination_key = _unique_destination(user_id, destination_folder, source_name)
+        destination_key = _unique_destination(
+            user_id=user_id,
+            folder=destination_folder,
+            name=source_name,
+            reserved=reserved_destinations,
+        )
         if source_key == destination_key:
             planned.append(
                 {"key": source_key, "destination_key": destination_key, "status": "unchanged"}
@@ -181,15 +191,35 @@ async def organize_files(user_id: str, moves: list[dict]) -> ToolResult:
 
     completed = await asyncio.to_thread(_move)
 
-    for item in completed:
-        if item["status"] != "moved":
-            continue
-        await vector_store.move_file(
-            old_file_id=_user_prefix(user_id) + item["key"],
-            new_file_id=_user_prefix(user_id) + item["destination_key"],
-            new_file_name=posixpath.basename(item["destination_key"]),
-            new_folder=item["destination_folder"],
-            user_id=user_id,
-        )
+    try:
+        for item in completed:
+            if item["status"] != "moved":
+                continue
+            await vector_store.move_file(
+                old_file_id=_user_prefix(user_id) + item["key"],
+                new_file_id=_user_prefix(user_id) + item["destination_key"],
+                new_file_name=posixpath.basename(item["destination_key"]),
+                new_folder=item["destination_folder"],
+                user_id=user_id,
+            )
+    except Exception:
+        await asyncio.to_thread(_rollback_moves, user_id, completed)
+        raise
 
     return ToolResult(content={"moves": completed})
+
+
+def _rollback_moves(user_id: str, completed: list[dict]) -> None:
+    for item in reversed(completed):
+        if item["status"] != "moved":
+            continue
+        source_full = _user_prefix(user_id) + item["key"]
+        destination_full = _user_prefix(user_id) + item["destination_key"]
+        if not _object_exists(destination_full):
+            continue
+        _s3.copy_object(
+            Bucket=settings.s3_bucket,
+            CopySource={"Bucket": settings.s3_bucket, "Key": destination_full},
+            Key=source_full,
+        )
+        _s3.delete_object(Bucket=settings.s3_bucket, Key=destination_full)

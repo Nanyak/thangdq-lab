@@ -2,12 +2,10 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from uuid import uuid4
 
-from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain_core.chat_history import InMemoryChatMessageHistory
+from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.tools import StructuredTool
+from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
@@ -91,19 +89,29 @@ class AgentRunState:
 
 def _history_messages(history: list[dict] | None) -> list[BaseMessage]:
     messages: list[BaseMessage] = []
-    for item in history or []:
+    total_chars = 0
+    bounded_history = (history or [])[-settings.max_chat_history_messages:]
+    for item in reversed(bounded_history):
         role = item.get("role")
         content = item.get("content")
         if not isinstance(content, str) or not content:
             continue
+        total_chars += len(content)
+        if total_chars > settings.max_chat_history_chars:
+            break
         if role == "user":
             messages.append(HumanMessage(content=content))
         elif role == "assistant":
             messages.append(AIMessage(content=content))
-    return messages
+    return list(reversed(messages))
 
 
-def _build_langchain_tools(user_id: str, default_scope: str, state: AgentRunState):
+def _build_langchain_tools(
+    user_id: str,
+    default_scope: str,
+    allow_mutations: bool,
+    state: AgentRunState,
+):
     async def search_files(query: str, scope: str = "all") -> dict:
         result = await file_tools.search_files(
             query=query,
@@ -124,6 +132,12 @@ def _build_langchain_tools(user_id: str, default_scope: str, state: AgentRunStat
             else move
             for move in moves
         ]
+        if not allow_mutations:
+            return {
+                "requires_confirmation": True,
+                "moves": normalized,
+                "message": "File organization requires confirmation before changes are applied.",
+            }
         result = await file_tools.organize_files(user_id=user_id, moves=normalized)
         return result.content
 
@@ -149,46 +163,28 @@ def _build_langchain_tools(user_id: str, default_scope: str, state: AgentRunStat
     ]
 
 
-def _build_agent(user_id: str, scope: str, history: list[dict] | None):
+def _build_agent(
+    user_id: str,
+    scope: str,
+    allow_mutations: bool,
+    history: list[dict] | None,
+):
     state = AgentRunState()
-    agent_tools = _build_langchain_tools(user_id=user_id, default_scope=scope, state=state)
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", _AGENT_SYSTEM_PROMPT),
-            MessagesPlaceholder("chat_history", optional=True),
-            ("human", "{input}"),
-            MessagesPlaceholder("agent_scratchpad"),
-        ]
+    agent_tools = _build_langchain_tools(
+        user_id=user_id,
+        default_scope=scope,
+        allow_mutations=allow_mutations,
+        state=state,
     )
-    agent = create_openai_tools_agent(
-        llm_client.langchain_chat(),
-        agent_tools,
-        prompt,
-    )
-    executor = AgentExecutor(
-        agent=agent,
+    agent = create_agent(
+        model=llm_client.langchain_chat(),
         tools=agent_tools,
-        max_iterations=6,
-        return_intermediate_steps=True,
-        handle_parsing_errors=True,
+        system_prompt=_AGENT_SYSTEM_PROMPT,
+        checkpointer=InMemorySaver(),
     )
 
     session_id = str(uuid4())
-    histories = {
-        session_id: InMemoryChatMessageHistory(messages=_history_messages(history))
-    }
-
-    def get_session_history(session: str) -> InMemoryChatMessageHistory:
-        return histories.setdefault(session, InMemoryChatMessageHistory())
-
-    runnable = RunnableWithMessageHistory(
-        executor,
-        get_session_history,
-        input_messages_key="input",
-        history_messages_key="chat_history",
-        output_messages_key="output",
-    )
-    return runnable, state, session_id
+    return agent, state, session_id, _history_messages(history)
 
 async def query(
     question: str,
@@ -239,24 +235,60 @@ async def chat(
     message: str,
     scope: str,
     user_id: str,
+    allow_mutations: bool = False,
     history: list[dict] | None = None,
 ) -> AsyncGenerator[dict, None]:
-    agent, state, session_id = _build_agent(user_id=user_id, scope=scope, history=history)
-    result = await agent.ainvoke(
-        {"input": message},
-        config={"configurable": {"session_id": session_id}},
+    agent, state, session_id, memory = _build_agent(
+        user_id=user_id,
+        scope=scope,
+        allow_mutations=allow_mutations,
+        history=history,
     )
+    emitted_source_count = 0
 
-    for action, observation in result.get("intermediate_steps", []):
-        yield {
-            "tool": {
-                "name": action.tool,
-                "status": "completed",
-                "result": observation,
+    async for event in agent.astream_events(
+        {"messages": [*memory, HumanMessage(content=message)]},
+        config={
+            "configurable": {"thread_id": session_id},
+            "recursion_limit": 12,
+        },
+        version="v2",
+    ):
+        event_name = event.get("event")
+        name = event.get("name", "")
+        data = event.get("data", {})
+
+        if event_name == "on_tool_start":
+            yield {
+                "tool": {
+                    "name": name,
+                    "status": "started",
+                    "input": data.get("input"),
+                }
             }
-        }
-    for source in state.sources:
-        yield {"source": source}
+        elif event_name == "on_tool_end":
+            yield {
+                "tool": {
+                    "name": name,
+                    "status": "completed",
+                    "result": data.get("output"),
+                }
+            }
+            for source in state.sources[emitted_source_count:]:
+                yield {"source": source}
+            emitted_source_count = len(state.sources)
+        elif event_name == "on_tool_error":
+            yield {
+                "tool": {
+                    "name": name,
+                    "status": "failed",
+                    "error": str(data.get("error", "")),
+                }
+            }
+        elif event_name == "on_chat_model_stream":
+            chunk = data.get("chunk")
+            content = getattr(chunk, "content", "")
+            if isinstance(content, str) and content:
+                yield {"token": content}
 
-    yield {"token": result.get("output", "")}
     yield {"done": True}

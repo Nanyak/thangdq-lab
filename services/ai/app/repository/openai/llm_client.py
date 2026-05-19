@@ -10,6 +10,7 @@ _langchain_chat = ChatOpenAI(
     model=settings.chat_model,
     temperature=0.1,
     max_tokens=1024,
+    streaming=True,
 )
 
 
@@ -25,18 +26,6 @@ async def stream_chat(messages: list[dict]) -> AsyncGenerator[str, None]:
         delta = chunk.choices[0].delta
         if delta.content:
             yield delta.content
-
-
-async def chat_with_tools(messages: list[dict], tools: list[dict]):
-    return await _client.chat.completions.create(
-        model=settings.chat_model,
-        messages=messages,
-        tools=tools,
-        tool_choice="auto",
-        temperature=0.1,
-        max_completion_tokens=1024,
-    )
-
 
 def langchain_chat() -> ChatOpenAI:
     return _langchain_chat

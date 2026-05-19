@@ -119,9 +119,12 @@ Example chat body:
 {
   "message": "List my files and organize receipts into a receipts folder",
   "scope": "all",
+  "allow_mutations": false,
   "history": []
 }
 ```
+
+Set `allow_mutations` to `true` only after the user confirms a proposed file organization plan.
 
 ## Project Structure
 
